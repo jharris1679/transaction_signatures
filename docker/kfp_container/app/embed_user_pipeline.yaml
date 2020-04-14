@@ -1,0 +1,38 @@
+"apiVersion": |-
+  argoproj.io/v1alpha1
+"kind": |-
+  Workflow
+"metadata":
+  "annotations":
+    "pipelines.kubeflow.org/pipeline_spec": |-
+      {"description": "Spending Signatures", "name": "User Embedding"}
+  "generateName": |-
+    user-embedding-
+"spec":
+  "arguments":
+    "parameters": []
+  "entrypoint": |-
+    user-embedding
+  "serviceAccountName": |-
+    pipeline-runner
+  "templates":
+  - "container":
+      "image": |-
+        gcr.io/tensile-oarlock-191715/user-embedding-img:forces_cups
+      "resources":
+        "limits":
+          "nvidia.com/gpu": !!int |-
+            1
+        "requests":
+          "memory": |-
+            50G
+    "name": |-
+      train-data
+  - "dag":
+      "tasks":
+      - "name": |-
+          train-data
+        "template": |-
+          train-data
+    "name": |-
+      user-embedding

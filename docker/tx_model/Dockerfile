@@ -1,0 +1,60 @@
+#FROM ubuntu:16.04
+FROM nvidia/cuda:latest
+
+WORKDIR /home/
+
+RUN apt-get update -y && \
+     apt-get -y upgrade && \
+     apt-get install -y python3-pip python3-dev && \
+     apt-get install -y libgtk2.0-dev && \
+     apt-get install -y software-properties-common && \
+     apt-get install -y gsutil && \
+     apt-get install -y vim && \
+     apt-get install -y openjdk-8-jdk && \
+     apt-get install -y git
+
+RUN pip3 install --upgrade pip
+
+# download and install gcloud
+RUN  export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
+     echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
+     apt-get update && apt-get install -y google-cloud-sdk
+
+ENV LC_CTYPE=C.UTF-8
+
+COPY payload/requirements.txt /srv/payload/
+RUN pip3 install --requirement /srv/payload/requirements.txt
+
+COPY app/ /home/
+
+# Configure google cloud tools
+RUN gcloud config set account training-agent@merchant-embeddings.iam.gserviceaccount.com --installation && \
+    gcloud config set project merchant-embeddings --installation && \
+    gcloud auth activate-service-account training-agent@merchant-embeddings.iam.gserviceaccount.com --key-file=/home/keydir/merchant-embeddings-7d23560a0b3f.json
+
+
+ENV GOOGLE_APPLICATION_CREDENTIALS='/home/keydir/merchant-embeddings-7d23560a0b3f.json'
+ENV JAVA_HOME='/usr/lib/jvm/java-8-openjdk-amd64/jre'
+ENV PYSPARK_PYTHON='python3'
+ENV PYSPARK_DRIVER_PYTHON='python3'
+ENV LD_LIBRARY_PATH='/usr/local/nvidia/lib64:/usr/local/nvidia/bin'
+
+ARG EXP_ID
+ENV EXP_ID=$EXP_ID
+
+#CMD ["bash"]
+
+ENTRYPOINT ["python3", \
+            "main.py", \
+            "--cuda", \
+            "--max_epochs", "10", \
+            "--model", "Transformer", \
+            "--use_pretrained_embeddings", \
+            "--isLocal", \
+            "--include_eighth_of_day", \
+            "--include_user_context", \
+            "--include_sys_category", \
+            "--include_day_of_week", \
+            "--include_amount" \
+            ]
