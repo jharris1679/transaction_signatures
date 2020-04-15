@@ -169,9 +169,9 @@ class TransactionSignatures(pl.LightningModule):
         if self.feature_set['amount']['enabled']:
             amount_scaled = self.amount_scaler(inputs['amount'])
             auxilliary_features.append(amount_scaled)
-        auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 2))
 
         if self.aux_feat_size > 0:
+            auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 2))
             aux_src = self.aux_embedding(auxilliary_features)  * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
