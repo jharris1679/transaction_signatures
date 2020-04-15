@@ -6,11 +6,13 @@ from argparse import ArgumentParser
 from tensorboardX import SummaryWriter
 
 
-def main(args, experiment_name):
-    logger = pl.loggers.TensorBoardLogger('lightning_logs', name='tx_model', version=experiment_id)
-    model = model.TransactionSignatures(hparams=args)
-    trainer = pl.Trainer(logger=logger)
-    trainer.fit(model)
+def main(args, experiment_id):
+    model_name = 'tx_model'
+    save_path = os.path.join('lightning_logs', model_name, experiment_id)
+    logger = pl.loggers.TensorBoardLogger('lightning_logs', name=model_name, version=experiment_id)
+    initialized_model = model.TransactionSignatures(hparams=args)
+    trainer = pl.Trainer(default_save_path=save_path, logger=logger)
+    trainer.fit(initialized_model)
 
 
 if __name__ == '__main__':
@@ -23,7 +25,7 @@ if __name__ == '__main__':
 
     # parametrize the network
     parser.add_argument('--experiment_id', type=str, default=experiment_id,
-                        help='Name of input data')
+                        help='Name of current run')
     parser.add_argument('--data', type=str, default='merchant_seqs_by_tx',
                         help='Name of input data')
     parser.add_argument('--data_cache', action='store_true',

@@ -50,6 +50,33 @@ class TransactionSignatures(pl.LightningModule):
                                       hparams.data_cache,
                                       hparams.isLocal)
 
+        self.feature_set['merchant_name']['output_size'] = self.features.ntoken
+        self.feature_set['user_reference']['output_size'] = self.features.nusers
+        self.feature_set['sys_category']['output_size'] = self.features.ncat
+
+        if self.hparams.use_pretrained_embeddings is False:
+            self.token_embedding = nn.Embedding(self.features.ntoken, hparams.embedding_size)
+        else:
+            embeddings = torch.tensor(self.features.dictionary.token_embeddings).float()
+            self.token_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
+
+        self.aux_feat_size = 0
+        if self.feature_set['eighth_of_day']['enabled']:
+            self.aux_feat_size += 2
+        if self.feature_set['day_of_week']['enabled']:
+            self.aux_feat_size += 2
+        if self.feature_set['amount']['enabled']:
+            self.aux_feat_size += 1
+
+        if self.aux_feat_size > 0:
+            self.aux_embedding = nn.Linear(self.aux_feat_size, self.hparams.embedding_size)
+
+        if self.feature_set['user_reference']:
+            self.user_embedding = nn.Embedding(self.features.nusers, self.hparams.embedding_size)
+
+        if self.feature_set['sys_category']:
+            self.cat_embedding = nn.Embedding(self.features.ncat, self.hparams.embedding_size)
+
         self.src_mask = None
         self.input_dropout = nn.Dropout(hparams.input_dropout)
         encoder_layers = TransformerEncoderLayer(hparams.embedding_size,
@@ -71,44 +98,23 @@ class TransactionSignatures(pl.LightningModule):
         pe[:, 1::2] = torch.cos(position * div_term)
         self.pe = pe.unsqueeze(0).transpose(0, 1)
 
-
-    def init_embeddings(self):
-        if self.hparams.use_pretrained_embeddings is False:
-            self.token_embedding = nn.Embedding(self.ntoken, hparams.embedding_size)
-        else:
-            embeddings = torch.tensor(self.features.dictionary.token_embeddings).float()
-            self.token_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
-
-        if self.feature_set['user_reference']:
-            self.user_embedding = nn.Embedding(self.nusers, self.hparams.embedding_size)
-
-        if self.feature_set['sys_category']:
-            self.cat_embedding = nn.Embedding(self.ncat, self.hparams.embedding_size)
+        self.decoders = {}
+        for feature, config in self.feature_set.items():
+            # excluding user_reference because input and target are the same
+            if config['enabled'] and feature != 'user_reference':
+                    decoder = []
+                    for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
+                        decoder.append(nn.Linear(self.hparams.embedding_size,
+                                                 self.hparams.embedding_size))
+                        decoder.append(nn.ReLU())
+                    decoder.append(nn.Linear(self.hparams.embedding_size,
+                                                  config['output_size']))
+                    self.decoders[feature] = nn.Sequential(*decoder)
 
 
     def positional_encoder(self, x):
         x = x + self.pe[:x.size(0), :]
         return self.layer_dropout(x)
-
-
-    def decoder(self, output_size):
-        decoder = []
-        for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
-            decoder.append(
-                nn.Linear(self.hparams.embedding_size, self.hparams.embedding_size)
-            )
-            decoder.append(nn.ReLU())
-        decoder.append(nn.Linear(self.hparams.embedding_size, output_size))
-        decoder = nn.Sequential(*decoder)
-        return decoder
-
-
-    def init_decoders(self):
-        self.decoders = {}
-        for feature, config in self.feature_set.items():
-            if config['enabled'] and feature != 'user_reference':
-                self.decoders[feature] = self.decoder(config['output_size'])
-        return self.decoders
 
 
     def _generate_square_subsequent_mask(self, sz):
@@ -165,18 +171,15 @@ class TransactionSignatures(pl.LightningModule):
             auxilliary_features.append(amount_scaled)
         auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 2))
 
-        if len(auxilliary_features) > 0:
-            input_size = auxilliary_features.size(2)
-            mlp = nn.Linear(input_size, self.hparams.embedding_size)
-            aux_src = mlp(auxilliary_features)
+        if self.aux_feat_size > 0:
+            aux_src = self.aux_embedding(auxilliary_features)  * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
         src = self.positional_encoder(src)
         transformer_output = self.transformer_encoder(src, self.src_mask)
 
-        decoders = self.init_decoders()
         decoder_outputs = {}
-        for feature, decoder in decoders.items():
+        for feature, decoder in self.decoders.items():
             output = decoder(transformer_output[:,0])
             decoder_outputs[feature] = F.log_softmax(output, dim=-1)
 
@@ -208,7 +211,7 @@ class TransactionSignatures(pl.LightningModule):
         outputs = self.forward(inputs)
 
         logs = {}
-        general_loss = 0.
+        general_loss = torch.tensor(0.)
         for feature, logits in outputs.items():
             key = feature + '_train_loss'
             if feature=='amount':
@@ -216,7 +219,7 @@ class TransactionSignatures(pl.LightningModule):
                 loss = self.mse_loss(logits, amount_targets)
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
-            logs[key] = loss.item()
+            logs[key] = loss
             loss *= self.feature_set[feature]['loss_weight']
             general_loss += loss
         general_loss /= len(outputs)
@@ -230,108 +233,100 @@ class TransactionSignatures(pl.LightningModule):
         return {'loss': general_loss, 'log': logs}
 
 
+    def trainging_epoch_end(self, outputs):
+        logs = {}
+        for metric in outputs[0]['log'].keys():
+            avg_metric = torch.stack([x['log'][metric] for x in outputs]).mean()
+            key = '{0}_epoch'.format(metric)
+            logs[key] = avg_metric
+
+        return {'log': logs}
+
+
     def validation_step(self, val_batch, batch_idx):
         inputs, targets = val_batch
         outputs = self.forward(inputs)
 
-        feature_losses = {}
-        general_loss = 0.
+        logs = {}
+        general_loss = torch.tensor(0.)
         for feature, logits in outputs.items():
-            key = feature + '_val_loss'
+            key = '{0}_val_loss'.format(feature)
             if feature=='amount':
                 amount_targets = self.amount_scaler(targets[feature])
                 loss = self.mse_loss(logits, amount_targets)
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
-            feature_losses[key] = loss.item()
+            logs[key] = loss
             loss *= self.feature_set[feature]['loss_weight']
             general_loss += loss
         general_loss /= len(outputs)
+        logs['val_loss'] = general_loss
 
-        recalls_at_k = {}
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
-            recalls_at_k[str(k)] = torch.tensor(recall)
+            key = 'merchant_name_val_recall_at_{0}'.format(str(k.item()))
+            logs[key] = torch.tensor(recall)
 
-        return {'val_loss': general_loss,
-                'val_recall': recalls_at_k,
-                'feature_losses': feature_losses}
+        return {'val_loss': general_loss, 'log': logs}
 
 
     def validation_epoch_end(self, outputs):
         logs = {}
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        logs['val_loss'] = avg_loss
-
-        for k in self.hparams.kvalues:
-            k = str(k.item())
-            avg_recall = torch.stack([x['val_recall'][k] for x in outputs]).mean()
-            key = 'val_recall_at_' + k
-            logs[key] = avg_recall
+        for metric in outputs[0]['log'].keys():
+            avg_metric = torch.stack([x['log'][metric] for x in outputs]).mean()
+            key = '{0}_epoch'.format(metric)
+            logs[key] = avg_metric
 
         self.sync_logs()
-        return {'avg_val_loss': avg_loss, 'log': logs}
+        return {'log': logs}
 
 
     def test_step(self, test_batch, batch_idx):
         inputs, targets = test_batch
         outputs = self.forward(inputs)
 
+        logs = {}
         general_loss = 0.
-        feature_losses = {}
         for feature, logits in outputs.items():
+            key = '{0}_test_loss'.format(feature)
             if feature=='amount':
                 amount_targets = self.amount_scaler(targets[feature])
                 loss = self.mse_loss(logits, amount_targets)
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
-            feature_losses[feature] = loss
+            logs[key] = loss.item()
             loss *= self.feature_set[feature]['loss_weight']
             general_loss += loss
-        general_loss /= len(feature_losses)
+        general_loss /= len(outputs)
+        logs['test_loss'] = general_loss
 
-        recalls_at_k = {}
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
-            recalls_at_k[k] = recall
+            key = 'merchant_name_test_recall_at_{0}'.format(str(k.item()))
+            logs[key] = torch.tensor(recall)
 
-        return {'test_loss': general_loss, 'test_recall': recalls_at_k}
+        return {'log': logs}
 
 
     def test_epoch_end(self, outputs):
         logs = {}
-        avg_loss = torch.stack([x['test_loss'] for x in outputs]).mean()
-        logs['test_loss'] = avg_loss
-
-        for k in self.hparams.kvalues:
-            avg_recall = torch.stack([x['test_recall'][k] for x in outputs]).mean()
-            key = 'test_recall_at_' + str(k)
-            logs[key] = avg_recall
+        for metric in outputs[0]['log'].keys():
+            avg_metric = torch.stack([x['log'][metric] for x in outputs]).mean()
+            key = '{0}_epoch'.format(metric)
+            logs[key] = avg_metric
 
         self.sync_logs()
-        return {'avg_test_loss': avg_loss, 'log': logs}
+        return {'log': logs}
 
 
     def prepare_data(self):
-        self.train_data = self.features.load('train')
-        self.val_data = self.features.load('val')
+        self.train_data = self.features.train_data
+        self.val_data = self.features.val_data
         print(self.val_data[0])
-        self.test_data = self.features.load('test')
-
-        self.ntoken = len(self.features.dictionary.idx2token)
-        #print(self.features.dictionary.idx2token)
-        self.nusers = len(self.features.dictionary.idx2user)
-        #print(self.features.dictionary.idx2user)
-        self.ncat = len(self.features.dictionary.idx2cat)
-        #print(self.features.dictionary.idx2cat)
-
-        self.feature_set['merchant_name']['output_size'] = self.ntoken
-        self.feature_set['user_reference']['output_size'] = self.nusers
-        self.feature_set['sys_category']['output_size'] = self.ncat
+        self.test_data = self.features.test_data
 
         print('Enabled features: {}'.format(self.feature_set))
-
-        self.init_embeddings()
+        pass
 
 
     def train_dataloader(self):
@@ -361,7 +356,7 @@ class TransactionSignatures(pl.LightningModule):
         # unhappy hack to get logs into GCS
         path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
         print('Syncing {} to GCS'.format(path))
-        cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/{1}/{2}'
-        copy_command = cmd_string.format(path, self.logger.name, self.logger.version)
+        cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}'
+        copy_command = cmd_string.format(path, self.logger.name)
         subprocess.run(copy_command.split())
         pass

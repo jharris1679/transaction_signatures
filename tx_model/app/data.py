@@ -46,7 +46,7 @@ class BigQuery(object):
             query = query.replace('{{seq_len}}', str(seq_len))
 
         if self.isLocal:
-            query = query + '\nlimit 6'
+            query = query + '\nlimit 10000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -175,6 +175,15 @@ class Features(object):
                 self.dictionary.add_token(token, embedding)
             print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2token)))
 
+        self.train_data = self.load('train')
+        self.val_data = self.load('val')
+        print(self.val_data[0])
+        self.test_data = self.load('test')
+
+        self.ntoken = len(self.dictionary.idx2token)
+        self.nusers = len(self.dictionary.idx2user)
+        self.ncat = len(self.dictionary.idx2cat)
+
 
     def prepare_token_sequence(self, seq):
         # query provides tx in descending temporal order, reverse to get
@@ -221,9 +230,7 @@ class Features(object):
         return X
 
     def arrange_features(self, data):
-        # Pad and tokenize user sequences
-        #print(schema)
-
+        # A structure to enable indexing a numpy matrix with column names.
         schema_dict = {'auth_ts': 0,
                     'user_reference': 1,
                     'merchant_name': 2,

@@ -18,7 +18,7 @@
   "templates":
   - "container":
       "image": |-
-        gcr.io/tensile-oarlock-191715/user-embedding-img:forces_cups
+        gcr.io/tensile-oarlock-191715/user-embedding-img:thong_burst
       "resources":
         "limits":
           "nvidia.com/gpu": !!int |-
