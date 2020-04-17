@@ -79,6 +79,7 @@ class TransactionSignatures(pl.LightningModule):
 
         self.src_mask = None
         self.input_dropout = nn.Dropout(hparams.input_dropout)
+        self.layer_dropout = nn.Dropout(hparams.layer_dropout)
         encoder_layers = TransformerEncoderLayer(hparams.embedding_size,
                                                  hparams.nhead,
                                                  hparams.nhid,
@@ -87,7 +88,6 @@ class TransactionSignatures(pl.LightningModule):
 
         # Initialize postition encoder
         # 5000 = max_seq_len
-        self.layer_dropout = nn.Dropout(p=hparams.layer_dropout)
         pe = torch.zeros(5000, hparams.embedding_size)
         position = torch.arange(0, 5000, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(
@@ -96,20 +96,21 @@ class TransactionSignatures(pl.LightningModule):
             )
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        self.pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
 
         self.decoders = {}
         for feature, config in self.feature_set.items():
             # excluding user_reference because input and target are the same
             if config['enabled'] and feature != 'user_reference':
-                    decoder = []
-                    for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
-                        decoder.append(nn.Linear(self.hparams.embedding_size,
-                                                 self.hparams.embedding_size))
-                        decoder.append(nn.ReLU())
+                decoder = []
+                for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
                     decoder.append(nn.Linear(self.hparams.embedding_size,
-                                                  config['output_size']))
-                    self.decoders[feature] = nn.Sequential(*decoder)
+                                             self.hparams.embedding_size))
+                    decoder.append(nn.ReLU())
+                decoder.append(nn.Linear(self.hparams.embedding_size,
+                                         config['output_size']))
+                self.decoders[feature] = nn.Sequential(*decoder)
 
 
     def positional_encoder(self, x):
@@ -146,6 +147,7 @@ class TransactionSignatures(pl.LightningModule):
             self.src_mask = None
 
         src = self.token_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
+        print(src.device)
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)
@@ -172,7 +174,7 @@ class TransactionSignatures(pl.LightningModule):
 
         if self.aux_feat_size > 0:
             auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 2))
-            aux_src = self.aux_embedding(auxilliary_features)  * math.sqrt(self.hparams.embedding_size)
+            aux_src = self.aux_embedding(auxilliary_features) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
         src = self.positional_encoder(src)
@@ -233,7 +235,7 @@ class TransactionSignatures(pl.LightningModule):
         return {'loss': general_loss, 'log': logs}
 
 
-    def trainging_epoch_end(self, outputs):
+    def training_epoch_end(self, outputs):
         logs = {}
         for metric in outputs[0]['log'].keys():
             avg_metric = torch.stack([x['log'][metric] for x in outputs]).mean()
@@ -356,7 +358,7 @@ class TransactionSignatures(pl.LightningModule):
         # unhappy hack to get logs into GCS
         path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
         print('Syncing {} to GCS'.format(path))
-        cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}'
+        cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
         copy_command = cmd_string.format(path, self.logger.name)
         subprocess.run(copy_command.split())
         pass
