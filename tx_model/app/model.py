@@ -68,6 +68,7 @@ class TransactionSignatures(pl.LightningModule):
         if self.feature_set['amount']['enabled']:
             self.aux_feat_size += 1
 
+        print(self.aux_feat_size)
         if self.aux_feat_size > 0:
             self.aux_embedding = nn.Linear(self.aux_feat_size, self.hparams.embedding_size)
 
@@ -103,14 +104,17 @@ class TransactionSignatures(pl.LightningModule):
         for feature, config in self.feature_set.items():
             # excluding user_reference because input and target are the same
             if config['enabled'] and feature != 'user_reference':
-                decoder = []
+                decoder_layers = []
+                decoder_name = feature + '_decoder'
                 for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
-                    decoder.append(nn.Linear(self.hparams.embedding_size,
+                    decoder_layers.append(nn.Linear(self.hparams.embedding_size,
                                              self.hparams.embedding_size))
-                    decoder.append(nn.ReLU())
-                decoder.append(nn.Linear(self.hparams.embedding_size,
+                    decoder_layers.append(nn.ReLU())
+                decoder_layers.append(nn.Linear(self.hparams.embedding_size,
                                          config['output_size']))
-                self.decoders[feature] = nn.Sequential(*decoder)
+                setattr(self, decoder_name, nn.Sequential(*decoder_layers))
+                self.decoders[feature] = getattr(self, decoder_name)
+
 
 
     def positional_encoder(self, x):
@@ -122,19 +126,6 @@ class TransactionSignatures(pl.LightningModule):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
-
-
-    def encode_cyclical(self, X):
-        X = X.type(torch.FloatTensor)
-        sin = torch.sin(X)
-        cos = torch.cos(X)
-        return torch.squeeze(torch.stack((sin, cos),2))
-
-
-    def amount_scaler(self, X):
-        # Assumes min = 0 and max = 3000
-        Xsc = X / 3000
-        return torch.unsqueeze(Xsc, dim=-1)
 
 
     def forward(self, inputs, has_mask=False):
@@ -161,20 +152,8 @@ class TransactionSignatures(pl.LightningModule):
             cat_src = self.cat_embedding(inputs['sys_category']) * math.sqrt(self.hparams.embedding_size)
             src = src + cat_src
 
-        auxilliary_features = []
-        if self.feature_set['eighth_of_day']['enabled']:
-            eighth_of_day = self.encode_cyclical(inputs['eighth_of_day'])
-            auxilliary_features.append(eighth_of_day)
-        if self.feature_set['day_of_week']['enabled']:
-            day_of_week = self.encode_cyclical(inputs['day_of_week'])
-            auxilliary_features.append(day_of_week)
-        if self.feature_set['amount']['enabled']:
-            amount_scaled = self.amount_scaler(inputs['amount'])
-            auxilliary_features.append(amount_scaled)
-
         if self.aux_feat_size > 0:
-            auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 2))
-            aux_src = self.aux_embedding(auxilliary_features) * math.sqrt(self.hparams.embedding_size)
+            aux_src = self.aux_embedding(inputs['aux']) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
         src = self.positional_encoder(src)
@@ -213,18 +192,17 @@ class TransactionSignatures(pl.LightningModule):
         outputs = self.forward(inputs)
 
         logs = {}
-        general_loss = torch.tensor(0.)
+        general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
             key = feature + '_train_loss'
             if feature=='amount':
-                amount_targets = self.amount_scaler(targets[feature])
-                loss = self.mse_loss(logits, amount_targets)
+                loss = self.mse_loss(logits, targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
-            loss *= self.feature_set[feature]['loss_weight']
-            general_loss += loss
-        general_loss /= len(outputs)
+            loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
+            weighted_loss = loss * loss_weight
+            general_loss += weighted_loss
         logs['train_loss'] = general_loss
 
         for k in self.hparams.kvalues:
@@ -250,18 +228,17 @@ class TransactionSignatures(pl.LightningModule):
         outputs = self.forward(inputs)
 
         logs = {}
-        general_loss = torch.tensor(0.)
+        general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
             key = '{0}_val_loss'.format(feature)
             if feature=='amount':
-                amount_targets = self.amount_scaler(targets[feature])
-                loss = self.mse_loss(logits, amount_targets)
+                loss = self.mse_loss(logits, targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
-            loss *= self.feature_set[feature]['loss_weight']
-            general_loss += loss
-        general_loss /= len(outputs)
+            loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
+            weighted_loss = loss * loss_weight
+            general_loss += weighted_loss
         logs['val_loss'] = general_loss
 
         for k in self.hparams.kvalues:
@@ -292,7 +269,7 @@ class TransactionSignatures(pl.LightningModule):
         for feature, logits in outputs.items():
             key = '{0}_test_loss'.format(feature)
             if feature=='amount':
-                amount_targets = self.amount_scaler(targets[feature])
+                amount_targets = targets[feature]
                 loss = self.mse_loss(logits, amount_targets)
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])

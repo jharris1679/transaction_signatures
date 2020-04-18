@@ -11,7 +11,13 @@ def main(args, experiment_id):
     save_path = os.path.join('lightning_logs', model_name, experiment_id)
     logger = pl.loggers.TensorBoardLogger('lightning_logs', name=model_name, version=experiment_id)
     initialized_model = model.TransactionSignatures(hparams=args)
-    trainer = pl.Trainer(default_save_path=save_path, logger=logger)
+    trainer = pl.Trainer(default_save_path=save_path,
+                        logger=logger,
+                        max_epochs=args.epochs,
+                        gpus=1,
+                        #distributed_backend='dp',
+                        accumulate_grad_batches=4,
+                        precision=16)
     trainer.fit(initialized_model)
 
 
