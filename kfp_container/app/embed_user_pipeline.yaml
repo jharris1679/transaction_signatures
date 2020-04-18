@@ -18,14 +18,14 @@
   "templates":
   - "container":
       "image": |-
-        gcr.io/tensile-oarlock-191715/user-embedding-img:response_visit
+        gcr.io/tensile-oarlock-191715/user-embedding-img:insulin_entry
       "resources":
         "limits":
           "nvidia.com/gpu": !!int |-
             4
         "requests":
           "memory": |-
-            80G
+            40G
     "name": |-
       train-data
     "nodeSelector":

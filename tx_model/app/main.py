@@ -6,17 +6,23 @@ from argparse import ArgumentParser
 from tensorboardX import SummaryWriter
 
 
+
 def main(args, experiment_id):
     model_name = 'tx_model'
-    save_path = os.path.join('lightning_logs', model_name, experiment_id)
+
+    logs_path = os.path.join('lightning_logs', model_name,  experiment_id)
     logger = pl.loggers.TensorBoardLogger('lightning_logs', name=model_name, version=experiment_id)
+
+    checkpoints_path = os.path.join('lightning_logs', model_name, 'checkpoints', experiment_id)
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath=checkpoints_path)
+
     initialized_model = model.TransactionSignatures(hparams=args)
-    trainer = pl.Trainer(default_save_path=save_path,
+    trainer = pl.Trainer(default_save_path=logs_path,
                         logger=logger,
+                        checkpoint_callback=checkpoint_callback,
                         max_epochs=args.epochs,
-                        gpus=1,
-                        #distributed_backend='dp',
-                        accumulate_grad_batches=4,
+                        gpus=4,
+                        distributed_backend='dp',
                         precision=16)
     trainer.fit(initialized_model)
 

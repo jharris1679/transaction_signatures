@@ -48,9 +48,9 @@ class BigQuery(object):
         if seq_len is not None:
             query = query.replace('{{seq_len}}', str(seq_len))
 
-        #if self.isLocal:
-        #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 10000'
+        if self.isLocal:
+            query = query + '\nlimit 10000'
+        #query = query + '\nlimit 10000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))

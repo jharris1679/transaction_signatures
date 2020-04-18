@@ -100,7 +100,7 @@ class TransactionSignatures(pl.LightningModule):
         pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
 
-        self.decoders = {}
+        self.decoders = nn.ModuleDict({})
         for feature, config in self.feature_set.items():
             # excluding user_reference because input and target are the same
             if config['enabled'] and feature != 'user_reference':
@@ -138,7 +138,6 @@ class TransactionSignatures(pl.LightningModule):
             self.src_mask = None
 
         src = self.token_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
-        print(src.device)
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)
@@ -161,8 +160,11 @@ class TransactionSignatures(pl.LightningModule):
 
         decoder_outputs = {}
         for feature, decoder in self.decoders.items():
+            key_name = feature + '_sofmax'
             output = decoder(transformer_output[:,0])
-            decoder_outputs[feature] = F.log_softmax(output, dim=-1)
+            softmax = F.log_softmax(output, dim=-1)
+            self.register_buffer(key_name, softmax)
+            decoder_outputs[feature] = getattr(self, key_name)
 
         return decoder_outputs
 
@@ -178,13 +180,14 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def recall_at_k(self, outputs, k, targets):
-        correct_count = 0
+        correct_count = torch.tensor(0).type_as(outputs)
         # loop over batches
         for i, x in enumerate(targets):
             values, indices = torch.topk(outputs[i], k)
             if x in indices:
                 correct_count += 1
-        return correct_count / self.hparams.batch_size
+        recall_at_k = correct_count / len(targets)
+        return recall_at_k
 
 
     def training_step(self, train_batch, batch_idx):
@@ -208,7 +211,7 @@ class TransactionSignatures(pl.LightningModule):
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
             key = 'merchant_name_train_recall_at_{0}'.format(str(k.item()))
-            logs[key] = torch.tensor(recall)
+            logs[key] = recall
 
         return {'loss': general_loss, 'log': logs}
 
@@ -244,7 +247,7 @@ class TransactionSignatures(pl.LightningModule):
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
             key = 'merchant_name_val_recall_at_{0}'.format(str(k.item()))
-            logs[key] = torch.tensor(recall)
+            logs[key] = recall
 
         return {'val_loss': general_loss, 'log': logs}
 
