@@ -6,6 +6,7 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from google.cloud import bigquery
+import subprocess
 
 class BigQuery(object):
     def __init__(self, isCached=False, isLocal=False):
@@ -18,7 +19,9 @@ class BigQuery(object):
             .config("spark.executor.memory", "25g") \
             .config("spark.driver.memory", "25g") \
             .config("spark.driver.maxResultSize", "5g") \
-            .appName('embed_users') \
+            .config("spark.executor.instances", "4") \
+            .config("spark.executor.cores", "4") \
+            .appName("embed_users") \
             .getOrCreate()
 
         # Use the Cloud Storage bucket for temporary BigQuery export data used
@@ -47,6 +50,7 @@ class BigQuery(object):
 
         if self.isLocal:
             query = query + '\nlimit 10000'
+        #query = query + '\nlimit 10000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -110,10 +114,10 @@ class BigQuery(object):
 
         print('Number of embeddings: {0}'.format(spark_df.count()))
 
-        self.emb_data = np.array(spark_df.collect())
+        emb_data = np.array(spark_df.collect())
         spark_df = None
 
-        return self.emb_data
+        return emb_data
 
 
 class Dictionary(object):
@@ -229,6 +233,20 @@ class Features(object):
         #print('post: {}'.format(type(X)))
         return X
 
+
+    def encode_cyclical(self, X):
+        X = X.type(torch.FloatTensor)
+        sin = torch.sin(X)
+        cos = torch.cos(X)
+        return torch.squeeze(torch.stack((sin, cos),1))
+
+
+    def amount_scaler(self, X):
+        # Assumes min = 0 and max = 3000
+        Xsc = X / 3000
+        return torch.unsqueeze(Xsc, dim=-1)
+
+
     def arrange_features(self, data):
         # A structure to enable indexing a numpy matrix with column names.
         schema_dict = {'auth_ts': 0,
@@ -253,6 +271,7 @@ class Features(object):
             input_dict = {}
             target_dict = {}
 
+            auxilliary_features = []
             for feature, config in self.feature_set.items():
                 if config['enabled']:
                     if feature =='user_reference':
@@ -285,12 +304,24 @@ class Features(object):
                         #print('{0} input: {1}'.format(feature, input_dict[feature]))
                         #print('{0} target: {1}'.format(feature, target_dict[feature]))
 
-                    if feature in ['day_of_week', 'eighth_of_day', 'amount']:
+                    if feature in ['day_of_week', 'eighth_of_day']:
                         sequence, target = self.prepare_numeric_sequence(row[schema_dict[feature]])
-                        input_dict[feature] = self.tensor(sequence)
+                        cyc = self.encode_cyclical(self.tensor(sequence))
+                        auxilliary_features.append(cyc)
                         target_dict[feature] = self.tensor(target)
                         #print('{0} input: {1}'.format(feature, input_dict[feature]))
                         #print('{0} target: {1}'.format(feature, target_dict[feature]))
+
+                    if feature == 'amount':
+                        sequence, target = self.prepare_numeric_sequence(row[schema_dict[feature]])
+                        scaled = self.amount_scaler(self.tensor(sequence))
+                        auxilliary_features.append(scaled)
+                        target_dict[feature] = self.amount_scaler(self.tensor(target))
+
+
+            if len(auxilliary_features) > 0:
+                auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
+                input_dict['aux'] = auxilliary_features
 
             sample = (input_dict, target_dict)
             samples.append(sample)

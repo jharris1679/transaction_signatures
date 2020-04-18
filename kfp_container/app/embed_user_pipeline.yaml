@@ -18,16 +18,19 @@
   "templates":
   - "container":
       "image": |-
-        gcr.io/tensile-oarlock-191715/user-embedding-img:thong_burst
+        gcr.io/tensile-oarlock-191715/user-embedding-img:insulin_entry
       "resources":
         "limits":
           "nvidia.com/gpu": !!int |-
-            1
+            4
         "requests":
           "memory": |-
-            50G
+            40G
     "name": |-
       train-data
+    "nodeSelector":
+      "cloud.google.com/gke-accelerator": |-
+        nvidia-tesla-v100
   - "dag":
       "tasks":
       - "name": |-
