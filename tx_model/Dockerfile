@@ -34,8 +34,8 @@ RUN gcloud config set account training-agent@merchant-embeddings.iam.gserviceacc
     gcloud auth activate-service-account training-agent@merchant-embeddings.iam.gserviceaccount.com --key-file=/home/keydir/merchant-embeddings-7d23560a0b3f.json
 
 # Install Apex for 16-bit precision from https://github.com/NVIDIA/apex
-RUN cd apex && \
-    pip3 install -v --global-option="--cpp_ext" --global-option="--cuda_ext" ./
+#RUN cd apex && \
+#    pip3 install -v --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 
 ENV GOOGLE_APPLICATION_CREDENTIALS='/home/keydir/merchant-embeddings-7d23560a0b3f.json'
 ENV JAVA_HOME='/usr/lib/jvm/java-8-openjdk-amd64/jre'
@@ -46,18 +46,18 @@ ENV LD_LIBRARY_PATH='/usr/local/nvidia/lib64:/usr/local/nvidia/bin'
 ARG EXP_ID
 ENV EXP_ID=$EXP_ID
 
-#CMD ["bash"]
+CMD ["bash"]
 
 
-ENTRYPOINT ["python3", \
-            "main.py", \
-            "--cuda", \
-            "--epochs", "10", \
-            "--model", "Transformer", \
-            "--use_pretrained_embeddings", \
-            "--include_eighth_of_day", \
-            "--include_user_context", \
-            "--include_sys_category", \
-            "--include_day_of_week", \
-            "--include_amount" \
-            ]
+#ENTRYPOINT ["python3", \
+#            "main.py", \
+#            "--cuda", \
+#            "--epochs", "10", \
+#            "--model", "Transformer", \
+#            "--use_pretrained_embeddings", \
+#            "--include_eighth_of_day", \
+#            "--include_user_context", \
+#            "--include_sys_category", \
+#            "--include_day_of_week", \
+#            "--include_amount" \
+#            ]

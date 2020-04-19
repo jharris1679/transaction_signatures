@@ -21,9 +21,9 @@ def main(args, experiment_id):
                         logger=logger,
                         checkpoint_callback=checkpoint_callback,
                         max_epochs=args.epochs,
-                        gpus=4,
-                        distributed_backend='dp',
-                        precision=16)
+                        gpus=0)
+                        #distributed_backend='dp',
+                        #precision=16)
     trainer.fit(initialized_model)
 
 
