@@ -1,3 +1,5 @@
 keydir/
 lightning_logs/
 __pycache__
+datasets/
+gcs_data/

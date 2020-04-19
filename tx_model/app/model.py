@@ -44,11 +44,7 @@ class TransactionSignatures(pl.LightningModule):
                                 'loss_weight': 1}
                             }
 
-        self.features = data.Features(hparams.data,
-                                      hparams.seq_len,
-                                      self.feature_set,
-                                      hparams.data_cache,
-                                      hparams.isLocal)
+        self.features = data.GCSDataset()
 
         self.feature_set['merchant_name']['output_size'] = self.features.ntoken
         self.feature_set['user_reference']['output_size'] = self.features.nusers
@@ -57,7 +53,7 @@ class TransactionSignatures(pl.LightningModule):
         if self.hparams.use_pretrained_embeddings is False:
             self.token_embedding = nn.Embedding(self.features.ntoken, hparams.embedding_size)
         else:
-            embeddings = torch.tensor(self.features.dictionary.token_embeddings).float()
+            embeddings = torch.tensor(self.features.dictionary['token_embeddings']).float()
             self.token_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
 
         self.aux_feat_size = 0
@@ -302,10 +298,10 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def prepare_data(self):
-        self.train_data = self.features.train_data
-        self.val_data = self.features.val_data
+        self.train_data = self.features.train
+        self.val_data = self.features.val
         print(self.val_data[0])
-        self.test_data = self.features.test_data
+        self.test_data = self.features.test
 
         print('Enabled features: {}'.format(self.feature_set))
         pass
