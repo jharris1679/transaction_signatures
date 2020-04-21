@@ -56,7 +56,7 @@ class BigQuery(object):
 
         #if self.isLocal:
         #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 10000'
+        query = query + '\nlimit 1000000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -278,7 +278,7 @@ class Features(object):
         input_dict = {}
         target_dict = {}
 
-        log_interval = 100
+        log_interval = 10000
         samples = []
         for index, row in enumerate(chunk):
             auxilliary_features = []
@@ -391,9 +391,7 @@ class Features(object):
             pool.close()
             pool.join()
 
-        print(len(self.samples))
         self.samples = [item for sublist in self.samples for item in sublist]
-        print(len(self.samples))
 
         # Write to disk
         dir = os.path.join('datasets', self.dataset_name + '_' + str(self.seq_len))
@@ -406,6 +404,8 @@ class Features(object):
         print('Writing {0} to {1}'.format(split, path))
         with open(path, 'wb') as f:
             pickle.dump(self.samples, f)
+
+        self.samples = None
 
         return self.samples
 
