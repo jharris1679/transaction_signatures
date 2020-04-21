@@ -273,77 +273,88 @@ class Features(object):
         return torch.unsqueeze(Xsc, dim=-1)
 
 
-    def process_row(self, row):
+    def process_row(self, chunk):
+        start_time = time.time()
         input_dict = {}
         target_dict = {}
 
-        auxilliary_features = []
-        for feature, config in self.feature_set.items():
-            if config['enabled']:
-                if feature =='user_reference':
-                    input_dict[feature] = self.tensor(
-                            self.dictionary.add_user(
-                                    row[self.schema_dict[feature]]
-                                    )
-                            )
-                    #print('{0} input: {1}'.format(feature, input_dict[feature]))
+        log_interval = 100
+        samples = []
+        for index, row in enumerate(chunk):
+            auxilliary_features = []
+            for feature, config in self.feature_set.items():
+                if config['enabled']:
+                    if feature =='user_reference':
+                        input_dict[feature] = self.tensor(
+                                self.dictionary.add_user(
+                                        row[self.schema_dict[feature]]
+                                        )
+                                )
+                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
 
-                if feature == 'merchant_name':
-                    sequence, target = self.prepare_token_sequence(
-                            row[self.schema_dict[feature]]
-                            )
-                    token_ids = np.array([], dtype=np.int64)
-                    mask = np.array([])
-                    for token in sequence:
-                        token_ids = np.append(token_ids, [self.dictionary.add_token(token)])
-                        if token != '<pad>':
-                            mask = np.append(mask, [1])
-                        else:
-                            mask = np.append(mask, [0])
-                    input_dict[feature] = self.tensor(token_ids)
-                    target_dict[feature] = self.tensor(self.dictionary.add_token(target))
-                    #masks.append(self.tensor(mask))
-                    #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                    #print('{0} target: {1}'.format(feature, target_dict[feature]))
+                    if feature == 'merchant_name':
+                        sequence, target = self.prepare_token_sequence(
+                                row[self.schema_dict[feature]]
+                                )
+                        token_ids = np.array([], dtype=np.int64)
+                        mask = np.array([])
+                        for token in sequence:
+                            token_ids = np.append(token_ids, [self.dictionary.add_token(token)])
+                            if token != '<pad>':
+                                mask = np.append(mask, [1])
+                            else:
+                                mask = np.append(mask, [0])
+                        input_dict[feature] = self.tensor(token_ids)
+                        target_dict[feature] = self.tensor(self.dictionary.add_token(target))
+                        #masks.append(self.tensor(mask))
+                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
+                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
 
-                if feature == 'sys_category':
-                    sequence, target = self.prepare_token_sequence(
-                            row[self.schema_dict[feature]]
-                            )
-                    token_ids = np.array([], dtype=np.int64)
-                    for token in sequence:
-                        token_ids = np.append(token_ids, [self.dictionary.add_category(token)])
-                    input_dict[feature] = self.tensor(token_ids)
-                    target_dict[feature] = self.tensor(self.dictionary.add_category(target))
-                    #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                    #print('{0} target: {1}'.format(feature, target_dict[feature]))
+                    if feature == 'sys_category':
+                        sequence, target = self.prepare_token_sequence(
+                                row[self.schema_dict[feature]]
+                                )
+                        token_ids = np.array([], dtype=np.int64)
+                        for token in sequence:
+                            token_ids = np.append(token_ids, [self.dictionary.add_category(token)])
+                        input_dict[feature] = self.tensor(token_ids)
+                        target_dict[feature] = self.tensor(self.dictionary.add_category(target))
+                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
+                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
 
-                if feature in ['day_of_week', 'eighth_of_day']:
-                    sequence, target = self.prepare_numeric_sequence(
-                            row[self.schema_dict[feature]]
-                            )
-                    cyc = self.encode_cyclical(self.tensor(sequence))
-                    auxilliary_features.append(cyc)
-                    target_dict[feature] = self.tensor(target)
-                    #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                    #print('{0} target: {1}'.format(feature, target_dict[feature]))
+                    if feature in ['day_of_week', 'eighth_of_day']:
+                        sequence, target = self.prepare_numeric_sequence(
+                                row[self.schema_dict[feature]]
+                                )
+                        cyc = self.encode_cyclical(self.tensor(sequence))
+                        auxilliary_features.append(cyc)
+                        target_dict[feature] = self.tensor(target)
+                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
+                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
 
-                if feature == 'amount':
-                    sequence, target = self.prepare_numeric_sequence(
-                            row[self.schema_dict[feature]]
-                            )
-                    scaled = self.amount_scaler(self.tensor(sequence))
-                    auxilliary_features.append(scaled)
-                    target_dict[feature] = self.amount_scaler(self.tensor(target))
+                    if feature == 'amount':
+                        sequence, target = self.prepare_numeric_sequence(
+                                row[self.schema_dict[feature]]
+                                )
+                        scaled = self.amount_scaler(self.tensor(sequence))
+                        auxilliary_features.append(scaled)
+                        target_dict[feature] = self.amount_scaler(self.tensor(target))
 
 
-        if len(auxilliary_features) > 0:
-            auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
-            input_dict['aux'] = auxilliary_features
+            if len(auxilliary_features) > 0:
+                auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
+                input_dict['aux'] = auxilliary_features
 
-        sample = input_dict, target_dict
+            sample = input_dict, target_dict
+            samples.append(sample)
 
-        return sample
+            if index%log_interval==0:
+                stop_time = time.time()
+                avg_duration = round(stop_time - start_time, 1) / log_interval
+                print('{0} rows complete\n{1}s/row'.format(index, avg_duration))
+                start_time = time.time()
+
+        return samples
 
 
     def prepare_data(self, data, split):
@@ -364,19 +375,25 @@ class Features(object):
         print('Max seq_len: {}'.format(self.max_len))
         print('Min seq_len: {}'.format(self.min_len))
 
-        log_interval = 100
+        cores = multi.cpu_count()
+        chunk_size = math.ceil(len(data) / cores)
+        print('Running {0} chunks of {1} rows'.format(cores, chunk_size))
+        log_interval = round(chunk_size / 100)
 
-        start_time = time.time()
-        self.samples = []
-        for i, x in enumerate(data):
-            sample = self.process_row(x)
-            self.samples.append(sample)
+        chunks = []
+        for pnum in range(cores):
+            start_id = pnum * chunk_size
+            stop_id = start_id + chunk_size
+            chunks.append(data[start_id:stop_id])
 
-            if i%log_interval==0:
-                stop_time = time.time()
-                avg_duration = round(stop_time - start_time, 3) / log_interval
-                print('{0} rows complete\n{1}s/row'.format(i, avg_duration))
-                start_time = time.time()
+        with multi.Pool(processes=cores) as pool:
+            self.samples = pool.map(self.process_row, chunks)
+            pool.close()
+            pool.join()
+
+        print(len(self.samples))
+        self.samples = [item for sublist in self.samples for item in sublist]
+        print(len(self.samples))
 
         # Write to disk
         dir = os.path.join('datasets', self.dataset_name + '_' + str(self.seq_len))
