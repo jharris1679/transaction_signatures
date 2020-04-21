@@ -56,7 +56,7 @@ class BigQuery(object):
 
         #if self.isLocal:
         #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 1000000'
+        query = query + '\nlimit 10000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -361,6 +361,7 @@ class Features(object):
         cores = multi.cpu_count()
         num_chunks = math.ceil(len(data) / cores)
         print('Running {0} chunks across {1} cores'.format(num_chunks, cores))
+        log_interval = round(num_chunks / 100)
 
 
         start_time = time.time()
@@ -373,10 +374,13 @@ class Features(object):
                 pool.close()
                 pool.join()
 
-            if chunk_id%10==0:
+            if chunk_id%log_interval==0:
                 stop_time = time.time()
-                avg_duration = round(stop_time - start_time, 1) / 10
-                print('Completed {0} chunks\n{1}s/chunk'.format(chunk_id, avg_duration))
+                avg_duration = round(stop_time - start_time, 1) \
+                                / log_interval \
+                                / len(chunk)
+                rows_complete = chunk_id * cores
+                print('{0} rows complete\n{1}s/row'.format(rows_complete, avg_duration))
                 start_time = time.time()
 
         # Write to disk
