@@ -83,7 +83,7 @@ class TransactionSignatures(pl.LightningModule):
                                                  hparams.layer_dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, hparams.nlayers)
 
-        # Initialize postition encoder
+        # Initialize postitional encoder
         # 5000 = max_seq_len
         pe = torch.zeros(5000, hparams.embedding_size)
         position = torch.arange(0, 5000, dtype=torch.float).unsqueeze(1)
@@ -110,7 +110,6 @@ class TransactionSignatures(pl.LightningModule):
                                          config['output_size']))
                 setattr(self, decoder_name, nn.Sequential(*decoder_layers))
                 self.decoders[feature] = getattr(self, decoder_name)
-
 
 
     def positional_encoder(self, x):
