@@ -1,16 +1,16 @@
 import os
-from io import open
 import torch
-from torch.utils.data import Dataset
 import numpy as np
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
 from google.cloud import bigquery
 import subprocess
-import gzip
 import pickle
 from argparse import ArgumentParser
+import multiprocessing as multi
+import time
+import math
+import json
 
 class BigQuery(object):
     def __init__(self, isCached=False, isLocal=False):
@@ -53,7 +53,7 @@ class BigQuery(object):
 
         #if self.isLocal:
         #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 10000'
+        query = query + '\nlimit 1000000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -95,11 +95,8 @@ class BigQuery(object):
 
         print('Number of sequences: {0}'.format(spark_df.count()))
 
-        #sorted_df = spark_df.sort(col('auth_ts').asc())
-        #spark_df = None
-
         data = np.array(spark_df.collect())
-        spark_df = None
+        spark_df.unpersist()
 
         return data
 
@@ -117,46 +114,43 @@ class BigQuery(object):
 
         print('Number of embeddings: {0}'.format(spark_df.count()))
 
-        emb_data = np.array(spark_df.collect())
-        spark_df = None
+        data = np.array(spark_df.collect())
+        spark_df.unpersist()
 
-        return emb_data
+        return data
 
 
 class Dictionary(object):
     def __init__(self):
-        self.token2idx = {}
-        self.idx2token = []
-        self.token_embeddings = []
+        self.merchant_embeddings = []
 
+        self.merchant2idx = {}
         self.user2idx = {}
+        with open('cat2idx.json', 'r') as f:
+            self.cat2idx = json.load(f)
+
+        self.idx2merchant = []
         self.idx2user = []
+        self.idx2cat = [k for k in self.cat2idx]
 
-        self.cat2idx = {}
-        self.idx2cat = []
 
-    def add_token(self, token, emb=None):
-        if token is None:
-            print('None token')
-        if token not in self.token2idx:
-            self.idx2token.append(token)
+    def add_merchant(self, merchant, emb=None):
+        if merchant is None:
+            print('None merchant')
+        if merchant not in self.merchant2idx:
+            self.idx2merchant.append(merchant)
             if emb is None:
                 emb = np.random.rand(512).astype('float32')
-            self.token_embeddings.append(emb)
-            self.token2idx[token] = len(self.idx2token) - 1
-        return self.token2idx[token]
+            self.merchant_embeddings.append(emb)
+            self.merchant2idx[merchant] = (len(self.idx2merchant)-1)
+        return self.merchant2idx[merchant]
+
 
     def add_user(self, user_id):
         if user_id not in self.user2idx:
             self.idx2user.append(user_id)
-            self.user2idx[user_id] = len(self.idx2user) - 1
+            self.user2idx[user_id] = (len(self.idx2user)-1)
         return self.user2idx[user_id]
-
-    def add_category(self, cat):
-        if cat not in self.cat2idx:
-            self.idx2cat.append(cat)
-            self.cat2idx[cat] = len(self.idx2cat) - 1
-        return self.cat2idx[cat]
 
 
 class Features(object):
@@ -166,9 +160,15 @@ class Features(object):
         self.seq_len = seq_len
         self.feature_set = feature_set
         self.dictionary = Dictionary()
-        self.dictionary.add_token('<cls>')
-        self.dictionary.add_token('<pad>')
-        self.dictionary.add_token('<unk>')
+        self.dictionary.add_merchant('<cls>')
+        self.dictionary.add_merchant('<pad>')
+        self.dictionary.add_merchant('<unk>')
+
+        self.data_dir = os.path.join(self.dataset_name + '_' + str(self.seq_len) + '_data')
+        try:
+            os.mkdir(self.data_dir)
+        except FileExistsError:
+            pass
 
         # Load pretrained embeddings
         # First two colums are index and merchant_name
@@ -177,62 +177,72 @@ class Features(object):
 
             # Add words to the dictionary
             for emb in emb_data:
-                token = emb[1]
+                merchant = emb[1]
                 embedding = emb[2:].astype(np.float32)
-                self.dictionary.add_token(token, embedding)
-            print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2token)))
+                self.dictionary.add_merchant(merchant, embedding)
+            print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
 
-        self.train_data = self.load('train')
-        self.val_data = self.load('val')
-        print(self.val_data[0])
-        self.test_data = self.load('test')
+        raw_train = self.bq.load_sequences(self.dataset_name, self.seq_len, 'train')
+        raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
+        raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
 
-        self.ntoken = len(self.dictionary.idx2token)
-        self.nusers = len(self.dictionary.idx2user)
-        self.ncat = len(self.dictionary.idx2cat)
+        # Remove reference to SparkContext and BigQuery clients prior to multiprocessing
+        # pickling self object within prepare_data()
+        del self.bq
+
+        processing_start = time.time()
+
+        self.prepare_data(raw_train, 'train')
+        self.prepare_data(raw_val, 'val')
+        self.prepare_data(raw_test, 'test')
+
+        processing_end = time.time()
+        processing_duration = round(processing_end - processing_start, 1)
+        print('Processing time: {0}s'.format(processing_duration))
+
+        # Write dictionary to disk
+        path = os.path.join(self.data_dir, 'dictionary')
+        print('Writing {0} to {1}'.format('dictionary', path))
+        with open(path, 'wb') as f:
+            pickle.dump(self.dictionary.__dict__, f)
 
         # Upload to GCS
-        upload_cmd = 'gsutil -m cp -r datasets/ gs://tensorboard_logging/'
+        upload_cmd = 'gsutil -m cp -r {0}/ gs://tx_sig_datasets/'.format(self.data_dir)
         print('Running {0}'.format(upload_cmd))
         result = subprocess.run(upload_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         if result.returncode == 0:
-            print(result.stdout)
+            pass
         else:
             if result.stderr:
                 raise result.stderr
 
 
     def prepare_token_sequence(self, seq):
-        # query provides tx in descending temporal order, reverse to get
-        # chronological sequence
-        sequence = np.append('<cls>', np.array(seq)[::-1])
+        sequence = np.append('<cls>', np.array(seq))
         target = sequence[-1]
         input = sequence[:-1]
 
         # Adding padding
-        if len(input) < self.max_len:
-            input = np.append(input, np.repeat('<pad>', self.max_len-len(input)))
+        if len(input) < self.seq_len-1:
+            input = np.append(input, np.repeat('<pad>', self.seq_len-len(input)))
 
         return input, target
 
 
     def prepare_numeric_sequence(self, seq):
-        # query provides tx in descending temporal order, reverse to get
-        # chronological sequence
-        sequence = np.append(0, np.array(seq)[::-1])
+        sequence = np.append(0, np.array(seq))
         target = sequence[-1]
         input = sequence[:-1]
 
         # Adding padding
-        if len(input) < self.max_len:
-            input = np.append(input, np.repeat(0, self.max_len-len(input)))
+        if len(input) < self.seq_len-1:
+            input = np.append(input, np.repeat(0, self.seq_len-len(input)))
 
         return input, target
 
 
     def tensor(self, X):
-        #print('pre: {}'.format(type(X)))
         if type(X)==np.ndarray:
             if X.dtype==np.float64:
                 X = torch.tensor(X).type(torch.FloatTensor)
@@ -244,7 +254,6 @@ class Features(object):
             X = torch.tensor(X).type(torch.FloatTensor)
         else:
             X = torch.tensor(X).type(torch.int64)
-        #print('post: {}'.format(type(X)))
         return X
 
 
@@ -261,9 +270,78 @@ class Features(object):
         return torch.unsqueeze(Xsc, dim=-1)
 
 
-    def arrange_features(self, data):
+    def process_row(self, chunk):
+        # This fucntion executes once per process
+        start_time = time.time()
+        input_dict = {}
+        target_dict = {}
+
+        log_interval = 10000
+        samples = []
+        for index, row in enumerate(chunk):
+            auxilliary_features = []
+            enabled_features = {k:v for k,v in self.feature_set.items() if v['enabled']==True}
+
+            for feature, config in enabled_features.items():
+                feat_seq = row[self.schema_dict[feature]]
+
+                if feature =='user_reference':
+                    user = feat_seq
+                    input_dict[feature] = self.tensor(self.dictionary.user2idx[user])
+
+                if feature == 'merchant_name':
+                    sequence, target = self.prepare_token_sequence(feat_seq)
+                    merchant_ids = []
+                    masks = []
+                    for merchant in sequence:
+                        merchant_ids.append(self.dictionary.merchant2idx[merchant])
+                        if merchant != '<pad>':
+                            masks.append(1)
+                        else:
+                            masks.append(0)
+                    input_dict[feature] = self.tensor(np.array(merchant_ids))
+                    target_dict[feature] = self.tensor(self.dictionary.merchant2idx[target])
+
+                if feature == 'sys_category':
+                    sequence, target = self.prepare_token_sequence(feat_seq)
+                    cat_ids = []
+                    for cat in sequence:
+                        cat_ids.append(self.dictionary.cat2idx[cat])
+                    input_dict[feature] = self.tensor(cat_ids)
+                    target_dict[feature] = self.tensor(self.dictionary.cat2idx[target])
+
+                if feature in ['day_of_week', 'eighth_of_day']:
+                    sequence, target = self.prepare_numeric_sequence(feat_seq)
+                    cyc = self.encode_cyclical(self.tensor(sequence))
+                    auxilliary_features.append(cyc)
+                    target_dict[feature] = self.tensor(target)
+
+                if feature == 'amount':
+                    sequence, target = self.prepare_numeric_sequence(feat_seq)
+                    scaled = self.amount_scaler(self.tensor(sequence))
+                    auxilliary_features.append(scaled)
+                    target_dict[feature] = self.amount_scaler(self.tensor(target))
+
+
+            if len(auxilliary_features) > 0:
+                auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
+                input_dict['aux'] = auxilliary_features
+
+            sample = input_dict, target_dict
+            samples.append(sample)
+
+            if index%log_interval==0:
+                stop_time = time.time()
+                avg_duration = round(stop_time - start_time, 1) / log_interval
+                print('{0} rows complete\n{1}s/row'.format(index, avg_duration))
+                start_time = time.time()
+
+        return samples
+
+
+    def prepare_data(self, data, split):
         # A structure to enable indexing a numpy matrix with column names.
-        schema_dict = {'auth_ts': 0,
+        self.schema_dict = {'auth_ts': 0,
                     'user_reference': 1,
                     'merchant_name': 2,
                     'day_of_week': 3,
@@ -271,95 +349,59 @@ class Features(object):
                     'amount': 5,
                     'sys_category': 6,
                     'auth_ts_seq': 7}
-        schema_list = [key for key in schema_dict]
 
-        seq_lengths = [len(seq) for seq in data[:,schema_dict['merchant_name']]]
-        self.max_len = max(seq_lengths)
-        self.min_len = min(seq_lengths)
-        print('Max seq_len: {}'.format(self.max_len))
-        print('Min seq_len: {}'.format(self.min_len))
+        tokenization_start = time.time()
 
-        samples = []
-
+        # tokenize pre-concurrency
         for row in data:
-            input_dict = {}
-            target_dict = {}
+            self.dictionary.add_user(row[self.schema_dict['user_reference']])
+            for merchant in row[self.schema_dict['merchant_name']]:
+                self.dictionary.add_merchant(merchant)
 
-            auxilliary_features = []
-            for feature, config in self.feature_set.items():
-                if config['enabled']:
-                    if feature =='user_reference':
-                        input_dict[feature] = self.tensor(self.dictionary.add_user(row[schema_dict[feature]]))
-                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
+        tokenization_end = time.time()
+        tokenization_duration = round(tokenization_end - tokenization_start, 1)
+        print('tokenization time: {0}s'.format(tokenization_duration))
 
-                    if feature == 'merchant_name':
-                        sequence, target = self.prepare_token_sequence(row[schema_dict[feature]])
-                        token_ids = np.array([], dtype=np.int64)
-                        mask = np.array([])
-                        for token in sequence:
-                            token_ids = np.append(token_ids, [self.dictionary.add_token(token)])
-                            if token != '<pad>':
-                                mask = np.append(mask, [1])
-                            else:
-                                mask = np.append(mask, [0])
-                        input_dict[feature] = self.tensor(token_ids)
-                        target_dict[feature] = self.tensor(self.dictionary.add_token(target))
-                        #masks.append(self.tensor(mask))
-                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
+        # Divide data into one chunk per cpu core
+        cores = multi.cpu_count()
+        chunk_size = math.ceil(len(data) / cores)
+        print('Running {0} chunks of {1} rows'.format(cores, chunk_size))
+        chunks = []
+        for pnum in range(cores):
+            start_id = pnum * chunk_size
+            stop_id = start_id + chunk_size
+            chunks.append(data[start_id:stop_id])
 
-                    if feature == 'sys_category':
-                        sequence, target = self.prepare_token_sequence(row[schema_dict[feature]])
-                        token_ids = np.array([], dtype=np.int64)
-                        for token in sequence:
-                            token_ids = np.append(token_ids, [self.dictionary.add_category(token)])
-                        input_dict[feature] = self.tensor(token_ids)
-                        target_dict[feature] = self.tensor(self.dictionary.add_category(target))
-                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
+        # Free up RAM
+        data = None
 
-                    if feature in ['day_of_week', 'eighth_of_day']:
-                        sequence, target = self.prepare_numeric_sequence(row[schema_dict[feature]])
-                        cyc = self.encode_cyclical(self.tensor(sequence))
-                        auxilliary_features.append(cyc)
-                        target_dict[feature] = self.tensor(target)
-                        #print('{0} input: {1}'.format(feature, input_dict[feature]))
-                        #print('{0} target: {1}'.format(feature, target_dict[feature]))
+        # Process data concurrently, one process per cpu core.
+        # Not guaranteed to use all cores.
+        with multi.Pool(processes=cores) as pool:
+            processed_chucks = pool.map(self.process_row, chunks)
+            pool.close()
+            pool.join()
 
-                    if feature == 'amount':
-                        sequence, target = self.prepare_numeric_sequence(row[schema_dict[feature]])
-                        scaled = self.amount_scaler(self.tensor(sequence))
-                        auxilliary_features.append(scaled)
-                        target_dict[feature] = self.amount_scaler(self.tensor(target))
+        # Free up RAM
+        chunks = None
 
+        # Flatten list of mutliprocess outputs
+        samples = [item for sublist in processed_chucks for item in sublist]
 
-            if len(auxilliary_features) > 0:
-                auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
-                input_dict['aux'] = auxilliary_features
-
-            sample = (input_dict, target_dict)
-            samples.append(sample)
-
-        return samples
-
-
-    def load(self, split):
-        data = self.arrange_features(
-                    self.bq.load_sequences(self.dataset_name, self.seq_len, split)
-                )
+        # Free up RAM
+        processed_chucks = None
 
         # Write to disk
-        dir = os.path.join('datasets', self.dataset_name + '_' + str(self.seq_len))
-        try:
-            os.mkdir(dir)
-        except FileExistsError:
-            pass
-        path = os.path.join(dir, split)
+        path = os.path.join(self.data_dir, split)
         print('Writing {0} to {1}'.format(split, path))
         with open(path, 'wb') as f:
-            pickle.dump(data, f)
+            pickle.dump(samples, f)
 
-        return data
+        # Free up RAM
+        samples = None
+
+        return None
+
 
 if __name__ == '__main__':
 
@@ -381,6 +423,8 @@ if __name__ == '__main__':
                         help='Turn on feature')
 
     args = parser.parse_args()
+
+    print(args)
 
     feature_set = {'merchant_name':
                         {'enabled': True},
