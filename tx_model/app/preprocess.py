@@ -53,7 +53,7 @@ class BigQuery(object):
 
         #if self.isLocal:
         #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 10000'
+        query = query + '\nlimit 1000000'
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))

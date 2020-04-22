@@ -46,7 +46,7 @@ class TransactionSignatures(pl.LightningModule):
 
         # Provide path to directory containing data files if loading locally
         # See data.py for more detail
-        self.features = data.LoadDataset(local_source=None)
+        self.features = data.LoadDataset(local_source='merchant_seqs_by_tx_32_data')
 
         self.feature_set['merchant_name']['output_size'] = self.features.nmerchant
         self.feature_set['user_reference']['output_size'] = self.features.nusers

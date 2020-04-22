@@ -29,12 +29,13 @@ class LoadDataset(object):
 
         if local_source is None:
             # Set local_source with dataset name
-            self.local_source = self.download_destination + gcs_source.split('/')[3]
+            print('Reading data from local files')
+            local_source = self.download_destination + gcs_source.split('/')[3]
             self.download_data(gcs_source, download_destination)
 
-        for filename in os.listdir(self.local_source):
+        for filename in os.listdir(local_source):
             print(filename)
-            path = os.path.join(self.local_source, filename)
+            path = os.path.join(local_source, filename)
             with open(path, 'rb') as f:
                 file = pickle.load(f)
                 setattr(self, filename, file)
