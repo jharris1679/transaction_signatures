@@ -255,7 +255,7 @@ class TransactionSignatures(pl.LightningModule):
             key = '{0}_epoch'.format(metric)
             logs[key] = avg_metric
 
-        self.sync_logs()
+        self.sync_logs(self.hparams.isLocal)
         return {'log': logs}
 
 
@@ -293,7 +293,7 @@ class TransactionSignatures(pl.LightningModule):
             key = '{0}_epoch'.format(metric)
             logs[key] = avg_metric
 
-        self.sync_logs()
+        self.sync_logs(self.hparams.isLocal)
         return {'log': logs}
 
 
@@ -330,11 +330,14 @@ class TransactionSignatures(pl.LightningModule):
         return optimizer
 
 
-    def sync_logs(self):
-        # unhappy hack to get logs into GCS
-        path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
-        print('Syncing {} to GCS'.format(path))
-        cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
-        copy_command = cmd_string.format(path, self.logger.name)
-        subprocess.run(copy_command.split())
+    def sync_logs(self, isLocal):
+        if not isLocal:
+            # unhappy hack to get logs into GCS
+            path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
+            print('Syncing {} to GCS'.format(path))
+            cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
+            copy_command = cmd_string.format(path, self.logger.name)
+            subprocess.run(copy_command.split())
+        else:
+            print('Running locally, skipping log sync')
         pass

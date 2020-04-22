@@ -95,7 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--kvalues', type=int, default=torch.tensor([1,3,10]),
                         help='Values of k for calculating recall at k')
     parser.add_argument('--isLocal', action='store_true',
-                        help='Run on a small subset of the data')
+                        help='No calls to GCP')
 
     args = parser.parse_args()
 
