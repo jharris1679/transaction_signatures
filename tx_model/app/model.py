@@ -44,17 +44,19 @@ class TransactionSignatures(pl.LightningModule):
                                 'loss_weight': 1}
                             }
 
-        self.features = data.GCSDataset()
+        # Provide path to directory containing data files if loading locally
+        # See data.py for more detail
+        self.features = data.LoadDataset(local_source=None)
 
-        self.feature_set['merchant_name']['output_size'] = self.features.ntoken
+        self.feature_set['merchant_name']['output_size'] = self.features.nmerchant
         self.feature_set['user_reference']['output_size'] = self.features.nusers
         self.feature_set['sys_category']['output_size'] = self.features.ncat
 
         if self.hparams.use_pretrained_embeddings is False:
-            self.token_embedding = nn.Embedding(self.features.ntoken, hparams.embedding_size)
+            self.merchant_embedding = nn.Embedding(self.features.nmerchant, hparams.embedding_size)
         else:
-            embeddings = torch.tensor(self.features.dictionary['token_embeddings']).float()
-            self.token_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
+            embeddings = torch.tensor(self.features.dictionary['merchant_embeddings']).float()
+            self.merchant_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
 
         self.aux_feat_size = 0
         if self.feature_set['eighth_of_day']['enabled']:
@@ -64,7 +66,6 @@ class TransactionSignatures(pl.LightningModule):
         if self.feature_set['amount']['enabled']:
             self.aux_feat_size += 1
 
-        print(self.aux_feat_size)
         if self.aux_feat_size > 0:
             self.aux_embedding = nn.Linear(self.aux_feat_size, self.hparams.embedding_size)
 
@@ -132,7 +133,7 @@ class TransactionSignatures(pl.LightningModule):
         else:
             self.src_mask = None
 
-        src = self.token_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
+        src = self.merchant_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)

@@ -1,0 +1,12 @@
+{"<cls>":0,
+"<pad>":1,
+"Bills and Services":2,
+"Eating and Drinking":3,
+"Entertainment":4,
+"Groceries":5,
+"Health and Life Maintenance":6,
+"Household":7,
+"Other":8,
+"Retail":9,
+"Transportation":10,
+"Travel":11}
