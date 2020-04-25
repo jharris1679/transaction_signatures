@@ -13,17 +13,25 @@ def main(args, experiment_id):
     logs_path = os.path.join('lightning_logs', model_name,  experiment_id)
     logger = pl.loggers.TensorBoardLogger('lightning_logs', name=model_name, version=experiment_id)
 
-    checkpoints_path = os.path.join('lightning_logs', model_name, 'checkpoints', experiment_id)
+    checkpoint_filename = experiment_id + '-{epoch}-{val_loss:.2f}'
+    checkpoints_path = os.path.join('checkpoints', model_name, checkpoint_filename)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath=checkpoints_path)
+
+    if args.isLocal==True:
+        gpus = 0
+        precision = 32
+    else:
+        gpus = args.num_gpus
+        precision = 16
 
     initialized_model = model.TransactionSignatures(hparams=args)
     trainer = pl.Trainer(default_save_path=logs_path,
                         logger=logger,
                         checkpoint_callback=checkpoint_callback,
                         max_epochs=args.epochs,
-                        gpus=0)
-                        #distributed_backend='dp',
-                        #precision=16)
+                        gpus=gpus,
+                        distributed_backend='dp',
+                        precision = precision)
     trainer.fit(initialized_model)
 
 
@@ -62,23 +70,23 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=4,
+    parser.add_argument('--nlayers', type=int, default=1,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
-    parser.add_argument('--lr', type=float, default=0.0001,
+    parser.add_argument('--lr', type=float, default=0.0008,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=128, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
                         help='batch size')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
     parser.add_argument('--input_dropout', type=float, default=0,
                         help='dropout applied to input sequences (0 = no dropout)')
-    parser.add_argument('--layer_dropout', type=float, default=0.2,
+    parser.add_argument('--layer_dropout', type=float, default=0.5,
                         help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--tied', action='store_true',
                         help='tie the word embedding and softmax weights')
@@ -96,6 +104,13 @@ if __name__ == '__main__':
                         help='Values of k for calculating recall at k')
     parser.add_argument('--isLocal', action='store_true',
                         help='No calls to GCP')
+    parser.add_argument('--num_gpus', type=int, default=4,
+                        help='Number of GPUs to use')
+    parser.add_argument('--epsilon', type=int, default=1e-6,
+                        help='For numerical stability')
+    parser.add_argument('--sample_size', type=int, default=-1,
+                        help='How much of the data to download. Files must already exist in this amount')
+
 
     args = parser.parse_args()
 

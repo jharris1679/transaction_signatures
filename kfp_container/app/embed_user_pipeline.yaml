@@ -18,7 +18,7 @@
   "templates":
   - "container":
       "image": |-
-        gcr.io/tensile-oarlock-191715/user-embedding-img:breeds_instrumentation
+        gcr.io/tensile-oarlock-191715/user-embedding-img:penalty_chapter
       "resources":
         "limits":
           "nvidia.com/gpu": !!int |-

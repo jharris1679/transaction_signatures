@@ -6,7 +6,8 @@ import pickle
 
 class LoadDataset(object):
     def __init__(self,
-                 gcs_source='gs://tx_sig_datasets/merchant_seqs_by_tx_32_data/',
+                 sample_size,
+                 gcs_source='gs://tx_sig_datasets/sample_{0}/merchant_seqs_by_tx_32_data/',
                  download_destination='gcs_data/',
                  local_source=None):
         """
@@ -23,19 +24,21 @@ class LoadDataset(object):
          - test
          - dictionary
         """
-
-        self.gcs_source = gcs_source
-        self.download_destination = download_destination
+        if sample_size < 0:
+            gcs_source = gcs_source.format('all')
+        else:
+            gcs_source = gcs_source.format(sample_size)
 
         if local_source is None:
             # Set local_source with dataset name
-            print('Reading data from local files')
-            local_source = self.download_destination + gcs_source.split('/')[3]
+            local_source = download_destination + gcs_source.split('/')[4]
             self.download_data(gcs_source, download_destination)
+        else:
+            print('Reading data from local files')
 
         for filename in os.listdir(local_source):
-            print(filename)
             path = os.path.join(local_source, filename)
+            print('Reading {0}'.format(path))
             with open(path, 'rb') as f:
                 file = pickle.load(f)
                 setattr(self, filename, file)
