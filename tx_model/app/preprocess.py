@@ -168,7 +168,7 @@ class Features(object):
         self.dictionary = Dictionary()
         self.dictionary.add_merchant('<cls>')
         self.dictionary.add_merchant('<pad>')
-        self.dictionary.add_merchant('<unk.')
+        self.dictionary.add_merchant('<unk>')
 
         if sample_size==-1:
             sample_dir = 'sample_all'
