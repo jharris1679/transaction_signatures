@@ -5,8 +5,6 @@ Predicting future spending behaviour of KOHO users.
 
 Clone the repo and navigate to root directory.
 
-`git clone https://github.com/jharris1679/transaction_signatures.git`
-
 `cd transaction_signatures`
 
 Running in Docker is encouraged. This repo uses the `nvidia/cuda:latest` image.
