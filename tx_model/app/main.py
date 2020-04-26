@@ -29,8 +29,7 @@ def main(args):
         precision = 16
 
     initialized_model = model.TransactionSignatures(hparams=args)
-    trainer = pl.Trainer(default_save_path=logs_path,
-                        logger=logger,
+    trainer = pl.Trainer(logger=logger,
                         checkpoint_callback=ckpt_callback,
                         callbacks=[gcs_callback],
                         max_epochs=args.epochs,

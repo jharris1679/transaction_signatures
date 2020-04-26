@@ -26,6 +26,10 @@ ENV LC_CTYPE=C.UTF-8
 COPY payload/requirements.txt /srv/payload/
 RUN pip3 install --requirement /srv/payload/requirements.txt
 
+# Empty checkpoints and logs before copying
+RUN rm -f checkpoints/* && \
+    rm -f lightning_logs/*
+
 COPY app/ /home/
 
 # Configure google cloud tools

@@ -1,6 +1,5 @@
 from google.cloud import storage
 import pytorch_lightning as pl
-import subprocess
 import torch
 import gzip
 import os
@@ -12,6 +11,10 @@ class LogSyncCallback(pl.Callback):
         self.log_interval = log_interval
         self.model_name = model_name
         self.experiment_id = experiment_id
+
+        client  = storage.Client()
+        self.logs_bucket = client.get_bucket('tensorboard_logging')
+        self.ckpt_bucket = client.get_bucket('tx_sig_checkpoints')
 
         # For finding best ckpt
         self.min_ckpt_loss = 100
@@ -33,9 +36,12 @@ class LogSyncCallback(pl.Callback):
     def sync_logs(self):
         log_path = os.path.join('lightning_logs/', self.model_name, self.experiment_id)
         print('\nSyncing {} to GCS'.format(log_path))
-        copy_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
-        copy_command = copy_string.format(log_path, self.model_name)
-        subprocess.run(copy_command.split())
+
+        for file in os.listdir(log_path):
+            filepath = os.path.join(log_path, file)
+            log_blob = self.logs_bucket.blob(filepath)
+            log_blob.upload_from_filename(filepath)
+
         pass
 
 
@@ -48,9 +54,9 @@ class LogSyncCallback(pl.Callback):
             if loss < self.min_ckpt_loss:
                 ckpt_file = os.path.join(ckpt_path, filename)
                 print('\nSyncing {} to GCS'.format(ckpt_file))
-                copy_string = 'gsutil -m cp -r {0} gs://tx_sig_checkpoints/{1}/'
-                copy_command = copy_string.format(ckpt_file, self.model_name)
-                subprocess.run(copy_command.split())
+                ckpt_blob = self.ckpt_bucket.blob(os.path.join(self.model_name, filename))
+                ckpt_blob.upload_from_filename(ckpt_file)
 
                 self.min_ckpt_loss = loss
+
         pass

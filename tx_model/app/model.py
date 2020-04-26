@@ -160,9 +160,8 @@ class TransactionSignatures(pl.LightningModule):
             key_name = feature + '_output'
             decoder_output = decoder(transformer_output[:,0])
             softmax = F.log_softmax(decoder_output, dim=-1)
-            output = softmax.add(self.hparams.epsilon)
-            self.register_buffer(key_name, output)
-            outputs[feature] = getattr(self, key_name)
+            output = softmax.add(self.hparams.epsilon).type_as(decoder_output)
+            outputs[feature] = output
 
         return outputs
 
