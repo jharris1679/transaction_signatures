@@ -2,20 +2,24 @@ import os
 import torch
 import pytorch_lightning as pl
 import model
+import gcs
 from argparse import ArgumentParser
 from tensorboardX import SummaryWriter
 
 
 
-def main(args, experiment_id):
-    model_name = 'tx_model'
+def main(args):
+    logs_path = os.path.join('lightning_logs', args.model_name,  args.experiment_id)
+    logger = pl.loggers.TensorBoardLogger('lightning_logs',
+                                          name=args.model_name,
+                                          version=args.experiment_id)
 
-    logs_path = os.path.join('lightning_logs', model_name,  experiment_id)
-    logger = pl.loggers.TensorBoardLogger('lightning_logs', name=model_name, version=experiment_id)
-
-    checkpoint_filename = experiment_id + '-{epoch}-{val_loss:.2f}'
-    checkpoints_path = os.path.join('checkpoints', model_name, checkpoint_filename)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath=checkpoints_path)
+    checkpoint_filename = args.experiment_id + '-{epoch}-{val_loss:.2f}'
+    checkpoints_path = os.path.join('checkpoints', args.model_name, checkpoint_filename)
+    ckpt_callback = pl.callbacks.ModelCheckpoint(filepath=checkpoints_path)
+    gcs_callback = gcs.LogSyncCallback(args.log_interval,
+                                       args.model_name,
+                                       args.experiment_id)
 
     if args.isLocal==True:
         gpus = 0
@@ -27,10 +31,11 @@ def main(args, experiment_id):
     initialized_model = model.TransactionSignatures(hparams=args)
     trainer = pl.Trainer(default_save_path=logs_path,
                         logger=logger,
-                        checkpoint_callback=checkpoint_callback,
+                        checkpoint_callback=ckpt_callback,
+                        callbacks=[gcs_callback],
                         max_epochs=args.epochs,
                         gpus=gpus,
-                        distributed_backend='dp',
+                        distributed_backend='ddp',
                         precision = precision)
     trainer.fit(initialized_model)
 
@@ -48,11 +53,13 @@ if __name__ == '__main__':
                         help='Name of current run')
     parser.add_argument('--data', type=str, default='merchant_seqs_by_tx',
                         help='Name of input data')
+    parser.add_argument('--model_name', type=str, default='tx_model',
+                        help='Name of model')
     parser.add_argument('--data_cache', action='store_true',
                         help='Use cached BQ table if option is present')
     parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                         help='report interval')
-    parser.add_argument('--model', type=str, default='Transformer',
+    parser.add_argument('--architecture', type=str, default='Transformer',
                         help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU, Transformer)')
     parser.add_argument('--embedding_size', type=int, default=512,
                         help='size of word embeddings')
@@ -80,7 +87,7 @@ if __name__ == '__main__':
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=204, metavar='N',
                         help='batch size')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
@@ -108,11 +115,11 @@ if __name__ == '__main__':
                         help='Number of GPUs to use')
     parser.add_argument('--epsilon', type=int, default=1e-6,
                         help='For numerical stability')
-    parser.add_argument('--sample_size', type=int, default=-1,
+    parser.add_argument('--sample_size', type=int, default=1000,
                         help='How much of the data to download. Files must already exist in this amount')
 
 
     args = parser.parse_args()
 
     # train
-    main(args, experiment_id)
+    main(args)

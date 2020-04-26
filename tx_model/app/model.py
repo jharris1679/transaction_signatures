@@ -53,7 +53,7 @@ class TransactionSignatures(pl.LightningModule):
         self.feature_set['user_reference']['output_size'] = self.features.nusers
         self.feature_set['sys_category']['output_size'] = self.features.ncat
 
-        if self.hparams.use_pretrained_embeddings is False:
+        if hparams.use_pretrained_embeddings is False:
             self.merchant_embedding = nn.Embedding(self.features.nmerchant, hparams.embedding_size)
         else:
             embeddings = torch.tensor(self.features.dictionary['merchant_embeddings']).float()
@@ -112,8 +112,6 @@ class TransactionSignatures(pl.LightningModule):
                                          config['output_size']))
                 setattr(self, decoder_name, nn.Sequential(*decoder_layers))
                 self.decoders[feature] = getattr(self, decoder_name)
-
-        self.last_synced_epoch = 0
 
 
     def positional_encoder(self, x):
@@ -191,9 +189,6 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
-        if batch_idx%500==0:
-            print('batch {0}'.format(batch_idx))
-            self.sync_logs(self.hparams.isLocal)
 
         inputs, targets = train_batch
         outputs = self.forward(inputs)
@@ -346,31 +341,3 @@ class TransactionSignatures(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
-
-
-    def sync_logs(self, isLocal):
-        if not isLocal:
-            # unhappy hack to get logs into GCS
-            log_path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
-            print('Syncing {} to GCS'.format(log_path))
-            cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
-            copy_command = cmd_string.format(log_path, self.logger.name)
-            subprocess.run(copy_command.split())
-
-            ckpt_path = os.path.join('checkpoints/', self.logger.name)
-            for filename in os.listdir(ckpt_path):
-                epoch = int(re.search(r'(?<=epoch=)\d', filename).group(0))
-                print(epoch)
-                if epoch > self.last_synced_epoch:
-                    current_ckpt = os.path.join(ckpt_path, filename)
-                    compress = 'gzip {0}'.format(current_ckpt)
-                    copy = 'gsutil -m cp -r {0}.gz gs://tx_sig_checkpoints/{1}/'
-                    copy = copy.format(current_ckpt, self.logger.name)
-                    print('Running {0}'.format(compress))
-                    subprocess.run(compress.split())
-                    print('Running {0}'.format(copy))
-                    subprocess.run(copy.split())
-                    self.last_synced_epoch = epoch
-        else:
-            print('Running locally, skipping log sync')
-        pass

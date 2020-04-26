@@ -49,7 +49,7 @@ ENV EXP_ID=$EXP_ID
 
 ENTRYPOINT ["python3", \
             "main.py", \
-            "--epochs", "5", \
+            "--epochs", "3", \
             "--model", "Transformer", \
             "--use_pretrained_embeddings", \
             "--include_eighth_of_day", \
