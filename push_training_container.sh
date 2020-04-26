@@ -18,7 +18,7 @@ docker rm   "${DOCKER_CONTAINER_NAME}"
 
 
 # Build the docker container.
-docker build -f $MODEL_DIR/Dockerfile     \
+docker build -f $MODEL_DIR/Dockerfile.remote     \
              --build-arg EXP_ID=$TAG \
              -t "${DOCKER_CONTAINER_IMAGE_NAME}":"${TAG}" "${CONTAINER_DIRECTORY}"
 

@@ -1,8 +1,11 @@
 #!/bin/sh
 
+SAMPLE_SIZE=$1
+
 python3 main.py \
         --isLocal \
-        --epochs 10 \
+        --sample_size=$SAMPLE_SIZE \
+        --epochs 1000 \
         --use_pretrained_embeddings \
         --include_eighth_of_day \
         --include_user_context \

@@ -13,7 +13,8 @@ import math
 import json
 
 class BigQuery(object):
-    def __init__(self, isCached=False, isLocal=False):
+    def __init__(self, sample_size, isCached=False, isLocal=False):
+        self.sample_size = sample_size
         self.isCached = isCached
         self.isLocal = isLocal
         print(self.isLocal)
@@ -51,9 +52,8 @@ class BigQuery(object):
         if seq_len is not None:
             query = query.replace('{{seq_len}}', str(seq_len))
 
-        #if self.isLocal:
-        #    query = query + '\nlimit 10000'
-        query = query + '\nlimit 1000000'
+        if self.sample_size > 0:
+            query = query + '\nlimit {0}'.format(self.sample_size)
 
         # Start the query, passing in the extra configuration.
         print('Running {0} query'.format(query_name))
@@ -154,8 +154,14 @@ class Dictionary(object):
 
 
 class Features(object):
-    def __init__(self, dataset_name, seq_len, feature_set, isCached=False, isLocal=False):
-        self.bq = BigQuery(isCached, isLocal)
+    def __init__(self,
+                 dataset_name,
+                 seq_len,
+                 sample_size,
+                 feature_set,
+                 isCached=False,
+                 isLocal=False):
+        self.bq = BigQuery(sample_size, isCached, isLocal)
         self.dataset_name = dataset_name
         self.seq_len = seq_len
         self.feature_set = feature_set
@@ -164,8 +170,14 @@ class Features(object):
         self.dictionary.add_merchant('<pad>')
         self.dictionary.add_merchant('<unk>')
 
-        self.data_dir = os.path.join(self.dataset_name + '_' + str(self.seq_len) + '_data')
+        if sample_size==-1:
+            sample_dir = 'sample_all'
+        else:
+            sample_dir = 'sample_{0}'.format(str(sample_size))
+        dataset_dir  = '{0}_{1}_data'.format(self.dataset_name, str(self.seq_len))
+        self.data_dir = os.path.join(sample_dir, dataset_dir)
         try:
+            os.mkdir(sample_dir)
             os.mkdir(self.data_dir)
         except FileExistsError:
             pass
@@ -207,7 +219,8 @@ class Features(object):
             pickle.dump(self.dictionary.__dict__, f)
 
         # Upload to GCS
-        upload_cmd = 'gsutil -m cp -r {0}/ gs://tx_sig_datasets/'.format(self.data_dir)
+        cmd_string = 'gsutil -m cp -r {0}/ gs://tx_sig_datasets/{1}/'
+        upload_cmd = cmd_string.format(self.data_dir, sample_dir)
         print('Running {0}'.format(upload_cmd))
         result = subprocess.run(upload_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -411,6 +424,8 @@ if __name__ == '__main__':
                         help='Name of input data')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
+    parser.add_argument('--sample_size', type=int, default=-1,
+                        help='sequence length')
     parser.add_argument('--include_user_context', action='store_true',
                         help='Turn on feature')
     parser.add_argument('--include_eighth_of_day', action='store_true',
@@ -440,4 +455,4 @@ if __name__ == '__main__':
                         {'enabled': args.include_sys_category}
                     }
 
-    Features(args.data, args.seq_len, feature_set)
+    Features(args.data, args.seq_len, args.sample_size, feature_set)

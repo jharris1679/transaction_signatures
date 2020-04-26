@@ -1,4 +1,5 @@
 import os
+import re
 import math
 import data
 import subprocess
@@ -46,13 +47,13 @@ class TransactionSignatures(pl.LightningModule):
 
         # Provide path to directory containing data files if loading locally
         # See data.py for more detail
-        self.features = data.LoadDataset(local_source='merchant_seqs_by_tx_32_data')
+        self.features = data.LoadDataset(self.hparams.sample_size, local_source=None)
 
         self.feature_set['merchant_name']['output_size'] = self.features.nmerchant
         self.feature_set['user_reference']['output_size'] = self.features.nusers
         self.feature_set['sys_category']['output_size'] = self.features.ncat
 
-        if self.hparams.use_pretrained_embeddings is False:
+        if hparams.use_pretrained_embeddings is False:
             self.merchant_embedding = nn.Embedding(self.features.nmerchant, hparams.embedding_size)
         else:
             embeddings = torch.tensor(self.features.dictionary['merchant_embeddings']).float()
@@ -154,15 +155,16 @@ class TransactionSignatures(pl.LightningModule):
         src = self.positional_encoder(src)
         transformer_output = self.transformer_encoder(src, self.src_mask)
 
-        decoder_outputs = {}
+        outputs = {}
         for feature, decoder in self.decoders.items():
-            key_name = feature + '_sofmax'
-            output = decoder(transformer_output[:,0])
-            softmax = F.log_softmax(output, dim=-1)
-            self.register_buffer(key_name, softmax)
-            decoder_outputs[feature] = getattr(self, key_name)
+            key_name = feature + '_output'
+            decoder_output = decoder(transformer_output[:,0])
+            softmax = F.log_softmax(decoder_output, dim=-1)
+            output = softmax.add(self.hparams.epsilon)
+            self.register_buffer(key_name, output)
+            outputs[feature] = getattr(self, key_name)
 
-        return decoder_outputs
+        return outputs
 
 
     def cross_entropy_loss(self, output, targets):
@@ -187,6 +189,7 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
+
         inputs, targets = train_batch
         outputs = self.forward(inputs)
 
@@ -201,6 +204,9 @@ class TransactionSignatures(pl.LightningModule):
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
+            if torch.isnan(weighted_loss).any():
+                print('{0} returned NaN loss'.format(feature))
+                weighted_loss.add(self.hparams.epsilon)
             general_loss += weighted_loss
         logs['train_loss'] = general_loss
 
@@ -219,7 +225,7 @@ class TransactionSignatures(pl.LightningModule):
             key = '{0}_epoch'.format(metric)
             logs[key] = avg_metric
 
-        return {'log': logs}
+        return {'loss': logs['train_loss_epoch'], 'log': logs}
 
 
     def validation_step(self, val_batch, batch_idx):
@@ -237,6 +243,9 @@ class TransactionSignatures(pl.LightningModule):
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
+            if torch.isnan(weighted_loss).any():
+                print('{0} returned NaN loss'.format(feature))
+                weighted_loss.add(self.hparams.epsilon)
             general_loss += weighted_loss
         logs['val_loss'] = general_loss
 
@@ -255,8 +264,7 @@ class TransactionSignatures(pl.LightningModule):
             key = '{0}_epoch'.format(metric)
             logs[key] = avg_metric
 
-        self.sync_logs(self.hparams.isLocal)
-        return {'log': logs}
+        return {'val_loss':logs['val_loss_epoch'], 'log': logs}
 
 
     def test_step(self, test_batch, batch_idx):
@@ -264,26 +272,28 @@ class TransactionSignatures(pl.LightningModule):
         outputs = self.forward(inputs)
 
         logs = {}
-        general_loss = 0.
+        general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
             key = '{0}_test_loss'.format(feature)
             if feature=='amount':
-                amount_targets = targets[feature]
-                loss = self.mse_loss(logits, amount_targets)
+                loss = self.mse_loss(logits, targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
-            logs[key] = loss.item()
-            loss *= self.feature_set[feature]['loss_weight']
-            general_loss += loss
-        general_loss /= len(outputs)
+            logs[key] = loss
+            loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
+            weighted_loss = loss * loss_weight
+            if torch.isnan(weighted_loss).any():
+                print('{0} returned NaN loss'.format(feature))
+                weighted_loss.add(self.hparams.epsilon)
+            general_loss += weighted_loss
         logs['test_loss'] = general_loss
 
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
             key = 'merchant_name_test_recall_at_{0}'.format(str(k.item()))
-            logs[key] = torch.tensor(recall)
+            logs[key] = recall
 
-        return {'log': logs}
+        return {'test_loss': general_loss, 'log': logs}
 
 
     def test_epoch_end(self, outputs):
@@ -293,7 +303,6 @@ class TransactionSignatures(pl.LightningModule):
             key = '{0}_epoch'.format(metric)
             logs[key] = avg_metric
 
-        self.sync_logs(self.hparams.isLocal)
         return {'log': logs}
 
 
@@ -310,34 +319,25 @@ class TransactionSignatures(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(self.train_data,
                           batch_size=self.hparams.batch_size,
-                          num_workers=4)
+                          num_workers=4,
+                          drop_last=True,
+                          shuffle=True)
 
 
     def val_dataloader(self):
         return DataLoader(self.val_data,
                           batch_size=self.hparams.batch_size,
-                          num_workers=4)
+                          num_workers=4,
+                          drop_last=True)
 
 
     def test_dataloader(self):
         return DataLoader(self.test_data,
                           batch_size=self.hparams.batch_size,
-                          num_workers=4)
+                          num_workers=4,
+                          drop_last=True)
 
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
-
-
-    def sync_logs(self, isLocal):
-        if not isLocal:
-            # unhappy hack to get logs into GCS
-            path = os.path.join('lightning_logs/', self.logger.name, self.logger.version)
-            print('Syncing {} to GCS'.format(path))
-            cmd_string = 'gsutil -m -q cp -r {0} gs://tensorboard_logging/lightning_logs/{1}/'
-            copy_command = cmd_string.format(path, self.logger.name)
-            subprocess.run(copy_command.split())
-        else:
-            print('Running locally, skipping log sync')
-        pass
