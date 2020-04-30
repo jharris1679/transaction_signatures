@@ -292,7 +292,6 @@ class Features(object):
         log_interval = 10000
         samples = []
         for index, row in enumerate(chunk):
-            auxilliary_features = []
             enabled_features = {k:v for k,v in self.feature_set.items() if v['enabled']==True}
 
             for feature, config in enabled_features.items():
@@ -326,19 +325,14 @@ class Features(object):
                 if feature in ['day_of_week', 'eighth_of_day']:
                     sequence, target = self.prepare_numeric_sequence(feat_seq)
                     cyc = self.encode_cyclical(self.tensor(sequence))
-                    auxilliary_features.append(cyc)
+                    input_dict[feature] = cyc
                     target_dict[feature] = self.tensor(target)
 
                 if feature == 'amount':
                     sequence, target = self.prepare_numeric_sequence(feat_seq)
                     scaled = self.amount_scaler(self.tensor(sequence))
-                    auxilliary_features.append(scaled)
+                    input_dict[feature] = scaled
                     target_dict[feature] = self.amount_scaler(self.tensor(target))
-
-
-            if len(auxilliary_features) > 0:
-                auxilliary_features = torch.squeeze(torch.cat(auxilliary_features, 1))
-                input_dict['aux'] = auxilliary_features
 
             sample = input_dict, target_dict
             samples.append(sample)

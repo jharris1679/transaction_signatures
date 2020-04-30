@@ -34,7 +34,7 @@ def main(args):
                         callbacks=[gcs_callback],
                         max_epochs=args.epochs,
                         gpus=gpus,
-                        distributed_backend='ddp',
+                        distributed_backend='dp',
                         precision = precision)
     trainer.fit(initialized_model)
 
@@ -74,19 +74,19 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_sys_category', action='store_true',
                         help='Turn on feature')
-    parser.add_argument('--nhid', type=int, default=300,
+    parser.add_argument('--nhid', type=int, default=32,
                         help='number of hidden units per layer')
     parser.add_argument('--nlayers', type=int, default=1,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
-    parser.add_argument('--lr', type=float, default=0.0008,
+    parser.add_argument('--lr', type=float, default=0.0001,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=204, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=307, metavar='N',
                         help='batch size')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
@@ -110,11 +110,11 @@ if __name__ == '__main__':
                         help='Values of k for calculating recall at k')
     parser.add_argument('--isLocal', action='store_true',
                         help='No calls to GCP')
-    parser.add_argument('--num_gpus', type=int, default=4,
+    parser.add_argument('--num_gpus', type=int, default=2,
                         help='Number of GPUs to use')
     parser.add_argument('--epsilon', type=int, default=1e-6,
                         help='For numerical stability')
-    parser.add_argument('--sample_size', type=int, default=1000,
+    parser.add_argument('--sample_size', type=int, default=1000000,
                         help='How much of the data to download. Files must already exist in this amount')
 
 

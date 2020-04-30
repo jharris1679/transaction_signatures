@@ -15,18 +15,18 @@ class LogSyncCallback(pl.Callback):
 
         # For finding best ckpt
         self.min_ckpt_loss = 100
-
-
-    def on_validation_end(self, trainer, pl_module):
-        self.sync_logs()
-        self.sync_ckpt()
-        pass
-
+        
 
     def on_batch_start(self, trainer, pl_module):
         log_cadence = trainer.batch_idx%self.log_interval
-        if log_cadence==0 and log_cadence!=0:
+        if log_cadence==0 and trainer.batch_idx!=0:
             self.sync_logs()
+        pass
+
+
+    def on_epoch_start(self, trainer, pl_module):
+        self.sync_logs()
+        self.sync_ckpt()
         pass
 
 

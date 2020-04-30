@@ -148,8 +148,20 @@ class TransactionSignatures(pl.LightningModule):
             cat_src = self.cat_embedding(inputs['sys_category']) * math.sqrt(self.hparams.embedding_size)
             src = src + cat_src
 
+        auxilliary_features = []
+
+        if self.feature_set['eighth_of_day']['enabled']:
+            auxilliary_features.append(inputs['eighth_of_day'])
+        if self.feature_set['day_of_week']['enabled']:
+            auxilliary_features.append(inputs['day_of_week'])
+        if self.feature_set['amount']['enabled']:
+            auxilliary_features.append(inputs['amount'])
+
         if self.aux_feat_size > 0:
-            aux_src = self.aux_embedding(inputs['aux']) * math.sqrt(self.hparams.embedding_size)
+            aux_inputs = torch.squeeze(torch.cat(auxilliary_features, 2))
+            print(aux_inputs)
+            print(aux_inputs.size())
+            aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
         src = self.positional_encoder(src)

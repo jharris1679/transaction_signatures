@@ -29,9 +29,9 @@ def training_op():
 def embed_user_pipeline():
     #data = dataset_op()
     training = training_op()
-    training.set_memory_request('80G')
+    training.set_memory_request('16G')
     training.add_node_selector_constraint('cloud.google.com/gke-accelerator', 'nvidia-tesla-v100')
-    training.add_resource_limit('nvidia.com/gpu', 4)
+    training.add_resource_limit('nvidia.com/gpu', 2)
     #training.after(data)
 
 if __name__ == '__main__':
