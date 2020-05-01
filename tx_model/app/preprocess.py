@@ -278,13 +278,13 @@ class Features(object):
 
 
     def stdscaler_fit(self, X):
-        self.s = np.std(X)
-        self.u = np.mean(X)
+        self.s = round(np.std(X), 3)
+        self.u = round(np.mean(X), 3)
         pass
 
 
     def stdscaler_transform(self, X):
-        Xsc = ( X - self.u ) / self.s
+        Xsc = round(( X - self.u ) / self.s, 3)
         X = None
         return Xsc
 
