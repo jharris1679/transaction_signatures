@@ -195,8 +195,8 @@ class Features(object):
             print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
 
         raw_train = self.bq.load_sequences(self.dataset_name, self.seq_len, 'train')
-        #raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
-        #raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
+        raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
+        raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
 
         # Remove reference to SparkContext and BigQuery clients prior to multiprocessing
         # pickling self object within prepare_data()
@@ -205,8 +205,8 @@ class Features(object):
         processing_start = time.time()
 
         self.prepare_data(raw_train, 'train')
-        #self.prepare_data(raw_val, 'val')
-        #self.prepare_data(raw_test, 'test')
+        self.prepare_data(raw_val, 'val')
+        self.prepare_data(raw_test, 'test')
 
         processing_end = time.time()
         processing_duration = round(processing_end - processing_start, 1)

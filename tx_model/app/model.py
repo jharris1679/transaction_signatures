@@ -207,7 +207,7 @@ class TransactionSignatures(pl.LightningModule):
         for feature, logits in outputs.items():
             key = feature + '_train_loss'
             if feature=='amount':
-                loss = self.mse_loss(logits, targets[feature])
+                loss = self.mse_loss(torch.squeeze(logits), targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
@@ -246,7 +246,7 @@ class TransactionSignatures(pl.LightningModule):
         for feature, logits in outputs.items():
             key = '{0}_val_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(logits, targets[feature])
+                loss = self.mse_loss(torch.squeeze(logits), targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
@@ -285,7 +285,7 @@ class TransactionSignatures(pl.LightningModule):
         for feature, logits in outputs.items():
             key = '{0}_test_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(logits, targets[feature])
+                loss = self.mse_loss(torch.squeeze(logits), targets[feature])
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
