@@ -195,8 +195,8 @@ class Features(object):
             print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
 
         raw_train = self.bq.load_sequences(self.dataset_name, self.seq_len, 'train')
-        raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
-        raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
+        #raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
+        #raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
 
         # Remove reference to SparkContext and BigQuery clients prior to multiprocessing
         # pickling self object within prepare_data()
@@ -205,8 +205,8 @@ class Features(object):
         processing_start = time.time()
 
         self.prepare_data(raw_train, 'train')
-        self.prepare_data(raw_val, 'val')
-        self.prepare_data(raw_test, 'test')
+        #self.prepare_data(raw_val, 'val')
+        #self.prepare_data(raw_test, 'test')
 
         processing_end = time.time()
         processing_duration = round(processing_end - processing_start, 1)
@@ -277,10 +277,17 @@ class Features(object):
         return torch.squeeze(torch.stack((sin, cos),1))
 
 
-    def amount_scaler(self, X):
-        # Assumes min = 0 and max = 3000
-        Xsc = X / 3000
-        return torch.unsqueeze(Xsc, dim=-1)
+    def stdscaler_fit(self, X):
+        X = np.array(X)
+        self.s = np.std(X)
+        self.u = np.mean(X)
+        pass
+
+
+    def stdscaler_transform(self, X):
+        X = np.array(X)
+        Xsc = ( X - self.u ) / self.s
+        return Xsc
 
 
     def process_row(self, chunk):
@@ -330,9 +337,9 @@ class Features(object):
 
                 if feature == 'amount':
                     sequence, target = self.prepare_numeric_sequence(feat_seq)
-                    scaled = self.amount_scaler(self.tensor(sequence))
-                    input_dict[feature] = scaled
-                    target_dict[feature] = self.amount_scaler(self.tensor(target))
+                    sequence = torch.unsqueeze(self.tensor(sequence), dim=-1)
+                    input_dict[feature] = sequence
+                    target_dict[feature] = self.tensor(target)
 
             sample = input_dict, target_dict
             samples.append(sample)
@@ -357,9 +364,26 @@ class Features(object):
                     'sys_category': 6,
                     'auth_ts_seq': 7}
 
-        tokenization_start = time.time()
+        # Scale amount values
+        scaling_start = time.time()
+
+        if self.feature_set['amount']['enabled']==True:
+            if split=='train':
+                amount_seqs = data[:,self.schema_dict['amount']]
+                amounts = [x for seq in amount_seqs for x in seq]
+                self.stdscaler_fit(amounts)
+
+            for idx, seq in enumerate(data[:,self.schema_dict['amount']]):
+                seq_sc = self.stdscaler_transform(seq)
+                data[idx, self.schema_dict['amount']] = seq_sc
+
+        scaling_end = time.time()
+        scaling_duration = round(scaling_end - scaling_start, 1)
+        print('scaling time: {0}s'.format(scaling_duration))
 
         # tokenize pre-concurrency
+        tokenization_start = time.time()
+
         for row in data:
             self.dictionary.add_user(row[self.schema_dict['user_reference']])
             for merchant in row[self.schema_dict['merchant_name']]:
