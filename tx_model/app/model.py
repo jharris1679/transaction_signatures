@@ -159,8 +159,6 @@ class TransactionSignatures(pl.LightningModule):
 
         if self.aux_feat_size > 0:
             aux_inputs = torch.squeeze(torch.cat(auxilliary_features, 2))
-            print(aux_inputs)
-            print(aux_inputs.size())
             aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 

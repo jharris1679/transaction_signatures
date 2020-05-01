@@ -238,7 +238,7 @@ class Features(object):
 
         # Adding padding
         if len(input) < self.seq_len-1:
-            input = np.append(input, np.repeat('<pad>', self.seq_len-len(input)))
+            input = np.append(input, np.repeat('<pad>', self.seq_len-len(input)-1))
 
         return input, target
 
@@ -250,7 +250,7 @@ class Features(object):
 
         # Adding padding
         if len(input) < self.seq_len-1:
-            input = np.append(input, np.repeat(0, self.seq_len-len(input)))
+            input = np.append(input, np.repeat(0, self.seq_len-len(input)-1))
 
         return input, target
 
