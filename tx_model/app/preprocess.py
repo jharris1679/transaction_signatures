@@ -161,7 +161,7 @@ class Features(object):
                  feature_set,
                  isCached=False,
                  isLocal=False):
-        self.bq = BigQuery(sample_size, isCached, isLocal)
+        bq = BigQuery(sample_size, isCached, isLocal)
         self.dataset_name = dataset_name
         self.seq_len = seq_len
         self.feature_set = feature_set
@@ -185,7 +185,7 @@ class Features(object):
         # Load pretrained embeddings
         # First two colums are index and merchant_name
         if dataset_name=='merchant_seqs_by_tx':
-            emb_data = self.bq.load_embeddings()
+            emb_data = bq.load_embeddings()
 
             # Add words to the dictionary
             for emb in emb_data:
@@ -194,19 +194,19 @@ class Features(object):
                 self.dictionary.add_merchant(merchant, embedding)
             print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
 
-        raw_train = self.bq.load_sequences(self.dataset_name, self.seq_len, 'train')
-        raw_val = self.bq.load_sequences(self.dataset_name, self.seq_len, 'val')
-        raw_test = self.bq.load_sequences(self.dataset_name, self.seq_len, 'test')
-
-        # Remove reference to SparkContext and BigQuery clients prior to multiprocessing
-        # pickling self object within prepare_data()
-        del self.bq
-
         processing_start = time.time()
 
+        raw_train = bq.load_sequences(self.dataset_name, self.seq_len, 'train')
         self.prepare_data(raw_train, 'train')
+        raw_train = None
+
+        raw_val = bq.load_sequences(self.dataset_name, self.seq_len, 'val')
         self.prepare_data(raw_val, 'val')
+        raw_val = None
+
+        raw_test = bq.load_sequences(self.dataset_name, self.seq_len, 'test')
         self.prepare_data(raw_test, 'test')
+        raw_test = None
 
         processing_end = time.time()
         processing_duration = round(processing_end - processing_start, 1)
