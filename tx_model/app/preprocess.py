@@ -278,13 +278,13 @@ class Features(object):
 
 
     def stdscaler_fit(self, X):
-        self.s = round(np.std(X), 3)
-        self.u = round(np.mean(X), 3)
+        self.s = np.std(X)
+        self.u = np.mean(X)
         pass
 
 
     def stdscaler_transform(self, X):
-        Xsc = round(( X - self.u ) / self.s, 3)
+        Xsc = ( X - self.u ) / self.s
         X = None
         return Xsc
 
@@ -340,12 +340,8 @@ class Features(object):
                     input_dict[feature] = sequence
                     target_dict[feature] = self.tensor(target)
 
-            chunk = None
             sample = input_dict, target_dict
-            input_dict = None
-            target_dict = None
             samples.append(sample)
-            sample = None
 
             if index%log_interval==0:
                 stop_time = time.time()
