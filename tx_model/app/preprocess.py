@@ -278,15 +278,14 @@ class Features(object):
 
 
     def stdscaler_fit(self, X):
-        X = np.array(X)
         self.s = np.std(X)
         self.u = np.mean(X)
         pass
 
 
     def stdscaler_transform(self, X):
-        X = np.array(X)
         Xsc = ( X - self.u ) / self.s
+        X = None
         return Xsc
 
 
@@ -371,7 +370,9 @@ class Features(object):
             if split=='train':
                 amount_seqs = data[:,self.schema_dict['amount']]
                 amounts = [x for seq in amount_seqs for x in seq]
+                amount_seqs = None
                 self.stdscaler_fit(amounts)
+                amounts = None
 
             for idx, seq in enumerate(data[:,self.schema_dict['amount']]):
                 seq_sc = self.stdscaler_transform(seq)
