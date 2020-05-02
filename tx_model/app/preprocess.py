@@ -292,14 +292,13 @@ class Features(object):
     def process_row(self, chunk):
         # This fucntion executes once per process
         start_time = time.time()
-        input_dict = {}
-        target_dict = {}
 
         log_interval = 10000
         samples = []
+        enabled_features = {k:v for k,v in self.feature_set.items() if v['enabled']==True}
         for index, row in enumerate(chunk):
-            enabled_features = {k:v for k,v in self.feature_set.items() if v['enabled']==True}
-
+            input_dict = {}
+            target_dict = {}
             for feature, config in enabled_features.items():
                 feat_seq = row[self.schema_dict[feature]]
 
