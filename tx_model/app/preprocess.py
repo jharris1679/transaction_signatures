@@ -182,18 +182,6 @@ class Features(object):
         except FileExistsError:
             pass
 
-        # Load pretrained embeddings
-        # First two colums are index and merchant_name
-        if dataset_name=='merchant_seqs_by_tx':
-            emb_data = bq.load_embeddings()
-
-            # Add words to the dictionary
-            for emb in emb_data:
-                merchant = emb[1]
-                embedding = emb[2:].astype(np.float32)
-                self.dictionary.add_merchant(merchant, embedding)
-            print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
-
         processing_start = time.time()
 
         raw_train = bq.load_sequences(self.dataset_name, self.seq_len, 'train')
@@ -211,6 +199,18 @@ class Features(object):
         processing_end = time.time()
         processing_duration = round(processing_end - processing_start, 1)
         print('Processing time: {0}s'.format(processing_duration))
+
+        # Load pretrained embeddings
+        # First two colums are index and merchant_name
+        if dataset_name=='merchant_seqs_by_tx':
+            emb_data = bq.load_embeddings()
+
+            # Add words to the dictionary
+            for emb in emb_data:
+                merchant = emb[1]
+                embedding = emb[2:].astype(np.float32)
+                self.dictionary.add_merchant(merchant, embedding)
+            print('Merchant vocab size: {0}'.format(len(self.dictionary.idx2merchant)))
 
         # Write dictionary to disk
         path = os.path.join(self.data_dir, 'dictionary')
