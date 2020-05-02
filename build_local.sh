@@ -27,6 +27,7 @@ docker build -f $MODEL_DIR/Dockerfile.local     \
 # Run the (newly built) docker container.
 # Open port 5000
 docker run -it -p "5000:5000"                                       \
+    --ipc=host                  \
     --env RUN_LOCALLY='True'   \
     -v "${PROJECT_DIRECTORY}:${DOCKER_PROJECT_DIRECTORY}"    \
     --name "${DOCKER_CONTAINER_NAME}" "${DOCKER_CONTAINER_IMAGE_NAME}":"${TAG}" \
