@@ -158,15 +158,18 @@ class Features(object):
     def __init__(self, args, isCached=False, isLocal=False):
         self.args = args
 
+        # Initialize token dictionaries
         self.dictionary = Dictionary()
         self.dictionary.add_merchant('<cls>')
         self.dictionary.add_merchant('<pad>')
         self.dictionary.add_merchant('<unk>')
 
+        # Initialize bigquery client with spark
         bq = BigQuery(args.sample_size, isCached, isLocal)
 
-        with open('feature_config.json', 'r') as config:
-            self.feature_config = json.load(config)
+        # Open config file
+        with open('feature_config.json', 'r') as config_file:
+            self.feature_config = json.load(config_file)
         assert self.feature_config['merchant_name']['enabled'] == True
 
         # Use args to enable features
@@ -175,6 +178,10 @@ class Features(object):
         self.feature_config['day_of_week']['enabled'] = self.args.include_day_of_week
         self.feature_config['amount']['enabled'] = self.args.include_amount
         self.feature_config['sys_category']['enabled'] = self.args.include_sys_category
+
+        # Write updated config back to disk
+        with open('feature_config.json', 'w') as config_file:
+            json.dump(self.feature_config, config_file)
 
         # Create directories
         if args.sample_size==-1:
@@ -347,8 +354,8 @@ class Row(object):
         with open(path, 'rb') as dict:
             self.dictionary = pickle.load(dict)
 
-        with open('feature_config.json', 'r') as config:
-            self.feature_config = json.load(config)
+        with open('feature_config.json', 'r') as config_file:
+            self.feature_config = json.load(config_file)
 
 
     def prepare_token_sequence(self, seq):
