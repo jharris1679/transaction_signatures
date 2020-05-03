@@ -40,8 +40,16 @@ class LoadDataset(object):
             path = os.path.join(local_source, filename)
             print('Reading {0}'.format(path))
             with open(path, 'rb') as f:
-                file = pickle.load(f)
-                setattr(self, filename, file)
+                if filename == 'dictionary':
+                    data = pickle.load(f)
+                else:
+                    data = []
+                    try:
+                        while True:
+                            data.append(pickle.load(f))
+                    except EOFError:
+                        pass
+                setattr(self, filename, data)
 
         self.nmerchant = len(self.dictionary['idx2merchant'])
         self.nusers = len(self.dictionary['idx2user'])

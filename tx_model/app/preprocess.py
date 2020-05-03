@@ -11,7 +11,7 @@ import multiprocessing as multi
 import time
 import math
 import json
-import tempfile
+import shutil
 
 class BigQuery(object):
     def __init__(self, sample_size, isCached=False, isLocal=False):
@@ -191,7 +191,6 @@ class Features(object):
         dataset_dir  = '{0}_{1}_data'.format(self.args.dataset_name, str(self.args.seq_len))
         self.data_dir = os.path.join(sample_dir, dataset_dir)
         try:
-            os.mkdir('tmp_data')
             os.mkdir(sample_dir)
             os.mkdir(self.data_dir)
         except FileExistsError:
@@ -260,6 +259,10 @@ class Features(object):
 
 
     def prepare_data(self, data, split):
+        try:
+            os.mkdir('tmp_data')
+        except FileExistsError:
+            pass
         # A structure to enable indexing a numpy matrix with column names.
         user_col = self.feature_config['user_reference']['column_index']
         merchant_col = self.feature_config['merchant_name']['column_index']
@@ -312,7 +315,7 @@ class Features(object):
         for pnum in range(cores):
             start_id = pnum * chunk_size
             stop_id = start_id + chunk_size
-            chunks.append(data[start_id:stop_id])
+            chunks.append((pnum, data[start_id:stop_id]))
 
         # Free up RAM
         data = None
@@ -321,27 +324,35 @@ class Features(object):
         # Not guaranteed to use all cores.
         row = Row(self.args)
         with multi.Pool(processes=cores) as pool:
-            processed_chucks = pool.map(row.transform, chunks)
+            processed_chunk_files = pool.map(row.transform, chunks)
             pool.close()
             pool.join()
+        print('Mulitprocessing complete')
 
         # Free up RAM
         chunks = None
 
-        # Flatten list of mutliprocess outputs
-        samples = [item for sublist in processed_chucks for item in sublist]
-
-        # Free up RAM
-        processed_chucks = None
-
         # Write to disk
-        path = os.path.join(self.data_dir, split)
-        print('Writing {0} to {1}'.format(split, path))
-        with open(path, 'wb') as f:
-            pickle.dump(samples, f)
+        merge_start = time.time()
 
-        # Free up RAM
-        samples = None
+        out_path = os.path.join(self.data_dir, split)
+        print('Writing {0} to {1}'.format(split, path))
+        with open(out_path, 'wb') as outfile:
+            for chunk_file in processed_chunk_files:
+                source_path = os.path.join('tmp_data', chunk_file)
+                with open(source_path, 'rb') as cf:
+                    try:
+                        while True:
+                            pickle.dump(tuple(pickle.load(cf)), outfile)
+                    except EOFError:
+                        pass
+
+        merge_end = time.time()
+        merge_duration = round(merge_end - merge_start, 1)
+        print('merge time: {0}s'.format(merge_duration))
+
+        # Delete tmp_data
+        shutil.rmtree('tmp_data')
 
         return None
 
@@ -353,6 +364,7 @@ class Row(object):
         path = os.path.join('tmp_data', 'dictionary')
         with open(path, 'rb') as dict:
             self.dictionary = pickle.load(dict)
+            del self.dictionary['merchant_embeddings']
 
         with open('feature_config.json', 'r') as config_file:
             self.feature_config = json.load(config_file)
@@ -403,9 +415,15 @@ class Row(object):
         cos = torch.cos(X)
         return torch.squeeze(torch.stack((sin, cos),1))
 
-
+    # This fucntion executes once per process
     def transform(self, chunk):
-        # This fucntion executes once per process
+        idx = chunk[0]
+        chunk = chunk[1]
+
+        chunk_filename = 'chunk_{0}'.format(idx)
+        path = os.path.join('tmp_data', chunk_filename)
+        fh = open(path, 'wb')
+
         start_time = time.time()
 
         log_interval = 10000
@@ -456,7 +474,7 @@ class Row(object):
                     target_dict[feature] = self.tensor(target)
 
             sample = input_dict, target_dict
-            samples.append(sample)
+            pickle.dump(sample, fh)
 
             if index%log_interval==0:
                 stop_time = time.time()
@@ -464,7 +482,8 @@ class Row(object):
                 print('{0} rows complete\n{1}s/row'.format(index, avg_duration))
                 start_time = time.time()
 
-        return samples
+        fh.close()
+        return chunk_filename
 
 
 
