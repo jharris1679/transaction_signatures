@@ -1,9 +1,20 @@
-import os
+from torch.utils.data import Dataset
 import numpy as np
 import subprocess
 import gzip
 import pickle
 import time
+import os
+
+class Dataset(Dataset):
+    def __init__(self, path):
+        with open(path, 'rb') as fh:
+            self.len = pickle.load(fh)
+            self.data = pickle.load(fh)
+    def __len__(self):
+        return self.len
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 class LoadDataset(object):
     def __init__(self,
@@ -42,8 +53,12 @@ class LoadDataset(object):
         for filename in os.listdir(local_source):
             path = os.path.join(local_source, filename)
             print('Reading {0}'.format(path))
-            with open(path, 'rb') as f:
-                data = pickle.load(f)
+            if filename == 'dictionary':
+                with open(path, 'rb') as f:
+                    data = pickle.load(f)
+                    setattr(self, filename, data)
+            else:
+                data = Dataset(path)
                 setattr(self, filename, data)
 
         read_end = time.time()

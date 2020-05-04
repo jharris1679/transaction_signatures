@@ -263,6 +263,10 @@ class Features(object):
             os.mkdir('tmp_data')
         except FileExistsError:
             pass
+
+        data_length = len(data)
+        print('{0} data length: {1}'.format(split, data_length))
+
         # A structure to enable indexing a numpy matrix with column names.
         user_col = self.feature_config['user_reference']['column_index']
         merchant_col = self.feature_config['merchant_name']['column_index']
@@ -336,19 +340,17 @@ class Features(object):
         # Write to disk
         merge_start = time.time()
 
-        data_out = []
-        for chunk_file in processed_chunk_files:
-            print('Merging {0}'.format(chunk_file))
-            source_path = os.path.join('tmp_data', chunk_file)
-            with open(source_path, 'rb') as readfile:
-                chunk = pickle.load(readfile)
-                for sample in chunk:
-                    data_out.append(sample)
-
         out_path = os.path.join(self.data_dir, split)
         print('Writing {0} to {1}'.format(split, out_path))
+        data = []
         with open(out_path, 'wb') as outfile:
-            pickle.dump(data_out, outfile)
+            pickle.dump(data_length, outfile)
+            for chunk_file in processed_chunk_files:
+                print('Merging {0}'.format(chunk_file))
+                source_path = os.path.join('tmp_data', chunk_file)
+                with open(source_path, 'rb') as readfile:
+                    data.extend(pickle.load(readfile))
+            pickle.dump(data, outfile)
 
         merge_end = time.time()
         merge_duration = round(merge_end - merge_start, 1)

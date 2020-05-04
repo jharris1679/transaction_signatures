@@ -46,7 +46,7 @@ join
   and length(merchant_name) > 1
   and amount*-1 > 0
   and amount*-1 < 3000
-  and format_date('%Y-%m', date(auth_ts)) = '2020-01') b
+  and date(auth_ts) = '2020-01-31') b
     on a.user_reference = b.user_reference
     and a.auth_ts > b.auth_ts
 group by a.auth_ts, a.user_reference
