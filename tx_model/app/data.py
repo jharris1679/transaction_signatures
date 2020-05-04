@@ -3,6 +3,7 @@ import numpy as np
 import subprocess
 import gzip
 import pickle
+import time
 
 class LoadDataset(object):
     def __init__(self,
@@ -36,20 +37,18 @@ class LoadDataset(object):
         else:
             print('Reading data from local files')
 
+        read_start = time.time()
+
         for filename in os.listdir(local_source):
             path = os.path.join(local_source, filename)
             print('Reading {0}'.format(path))
             with open(path, 'rb') as f:
-                if filename == 'dictionary':
-                    data = pickle.load(f)
-                else:
-                    data = []
-                    try:
-                        while True:
-                            data.append(pickle.load(f))
-                    except EOFError:
-                        pass
+                data = pickle.load(f)
                 setattr(self, filename, data)
+
+        read_end = time.time()
+        read_duration = round(read_end - read_start, 1)
+        print('read time: {0}s'.format(read_duration))
 
         self.nmerchant = len(self.dictionary['idx2merchant'])
         self.nusers = len(self.dictionary['idx2user'])

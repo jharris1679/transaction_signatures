@@ -336,14 +336,19 @@ class Features(object):
         # Write to disk
         merge_start = time.time()
 
+        data_out = []
+        for chunk_file in processed_chunk_files:
+            print('Merging {0}'.format(chunk_file))
+            source_path = os.path.join('tmp_data', chunk_file)
+            with open(source_path, 'rb') as readfile:
+                chunk = pickle.load(readfile)
+                for sample in chunk:
+                    data_out.append(sample)
+
         out_path = os.path.join(self.data_dir, split)
         print('Writing {0} to {1}'.format(split, out_path))
         with open(out_path, 'wb') as outfile:
-            for chunk_file in processed_chunk_files:
-                print('Merging {0}'.format(chunk_file))
-                source_path = os.path.join('tmp_data', chunk_file)
-                with open(source_path, 'rb') as readfile:
-                    shutil.copyfileobj(readfile, outfile)
+            pickle.dump(data_out, outfile)
 
         merge_end = time.time()
         merge_duration = round(merge_end - merge_start, 1)
@@ -472,7 +477,7 @@ class Row(object):
                     target_dict[feature] = self.tensor(target)
 
             sample = input_dict, target_dict
-            pickle.dump(sample, fh)
+            samples.append(sample)
 
             if index%log_interval==0:
                 stop_time = time.time()
@@ -480,6 +485,7 @@ class Row(object):
                 print('{0} rows complete\n{1}s/row'.format(index, avg_duration))
                 start_time = time.time()
 
+        pickle.dump(samples, fh)
         fh.close()
         return chunk_filename
 
