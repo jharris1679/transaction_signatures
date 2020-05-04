@@ -307,12 +307,13 @@ class Features(object):
         with open(path, 'wb') as f:
             pickle.dump(self.dictionary.__dict__, f)
 
-        # Divide data into one chunk per cpu core
+        # Divide data into two chunks per cpu core
         cores = multi.cpu_count()
-        chunk_size = math.ceil(len(data) / cores)
-        print('Running {0} chunks of {1} rows'.format(cores, chunk_size))
+        num_chunks = cores*2
+        chunk_size = math.ceil(len(data) / num_chunks)
+        print('Running {0} chunks of {1} rows'.format(num_chunks, chunk_size))
         chunks = []
-        for pnum in range(cores):
+        for pnum in range(num_chunks):
             start_id = pnum * chunk_size
             stop_id = start_id + chunk_size
             chunks.append((pnum, data[start_id:stop_id]))
@@ -336,16 +337,13 @@ class Features(object):
         merge_start = time.time()
 
         out_path = os.path.join(self.data_dir, split)
-        print('Writing {0} to {1}'.format(split, path))
+        print('Writing {0} to {1}'.format(split, out_path))
         with open(out_path, 'wb') as outfile:
             for chunk_file in processed_chunk_files:
+                print('Merging {0}'.format(chunk_file))
                 source_path = os.path.join('tmp_data', chunk_file)
-                with open(source_path, 'rb') as cf:
-                    try:
-                        while True:
-                            pickle.dump(tuple(pickle.load(cf)), outfile)
-                    except EOFError:
-                        pass
+                with open(source_path, 'rb') as readfile:
+                    shutil.copyfileobj(readfile, outfile)
 
         merge_end = time.time()
         merge_duration = round(merge_end - merge_start, 1)
