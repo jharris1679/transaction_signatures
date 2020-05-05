@@ -350,14 +350,16 @@ class Features(object):
                 source_path = os.path.join('tmp_data', chunk_file)
                 with open(source_path, 'rb') as readfile:
                     data.extend(pickle.load(readfile))
+            # Delete tmp_data
+            shutil.rmtree('tmp_data')
             pickle.dump(data, outfile)
+        data = None
 
         merge_end = time.time()
         merge_duration = round(merge_end - merge_start, 1)
         print('merge time: {0}s'.format(merge_duration))
 
-        # Delete tmp_data
-        shutil.rmtree('tmp_data')
+
 
         return None
 
