@@ -311,9 +311,9 @@ class Features(object):
         with open(path, 'wb') as f:
             pickle.dump(self.dictionary.__dict__, f)
 
-        # Divide data into two chunks per cpu core
-        cores = multi.cpu_count()
-        num_chunks = cores*2
+        # Divide data into chunks
+        cores = int(multi.cpu_count() / 2)
+        num_chunks = cores*4
         chunk_size = math.ceil(len(data) / num_chunks)
         print('Running {0} chunks of {1} rows'.format(num_chunks, chunk_size))
         chunks = []
