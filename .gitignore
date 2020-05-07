@@ -5,3 +5,4 @@ datasets/
 gcs_data/
 checkpoints/
 sample_*/
+tmp_data/

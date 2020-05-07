@@ -54,10 +54,10 @@ ENV EXP_ID=$EXP_ID
 ENTRYPOINT ["python3", \
             "main.py", \
             "--epochs", "3", \
-            "--use_pretrained_embeddings", \
-            "--include_amount", \
-            "--include_user_context" \
+            "--use_pretrained_embeddings" \
+            #"--include_sys_category" \
+            #"--include_amount" \
+            #"--include_user_context" \
             #"--include_eighth_of_day", \
             #"--include_day_of_week" \
-            #"--include_sys_category" \
             ]

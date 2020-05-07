@@ -74,9 +74,9 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_sys_category', action='store_true',
                         help='Turn on feature')
-    parser.add_argument('--nhid', type=int, default=32,
+    parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=1,
+    parser.add_argument('--nlayers', type=int, default=4,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
@@ -86,7 +86,7 @@ if __name__ == '__main__':
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=3072, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
                         help='batch size')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
