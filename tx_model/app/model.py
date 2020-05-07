@@ -22,7 +22,7 @@ class TransactionSignatures(pl.LightningModule):
         self.feature_set = {'merchant_name':
                                 {'enabled': True,
                                 'output_size': None,
-                                'loss_weight': 1},
+                                'loss_weight': hparams.merchant_name_loss_weight},
                             'user_reference':
                                 {'enabled': hparams.include_user_context,
                                 'output_size': None,
@@ -30,19 +30,20 @@ class TransactionSignatures(pl.LightningModule):
                             'eighth_of_day':
                                 {'enabled': hparams.include_eighth_of_day,
                                 'output_size': 9,
-                                'loss_weight': 1},
+                                'loss_weight': hparams.tod_loss_weight},
                             'day_of_week':
                                 {'enabled': hparams.include_day_of_week,
                                 'output_size': 8,
-                                'loss_weight': 1},
+                                'loss_weight': hparams.dow_loss_weight},
                             'amount':
                                 {'enabled': hparams.include_amount,
                                 'output_size': 1,
-                                'loss_weight': 1},
+                                'loss_weight': hparams.amount_loss_weight},
+                            # Has been removed from queries
                             'sys_category':
-                                {'enabled': hparams.include_sys_category,
+                                {'enabled':False,
                                 'output_size': None,
-                                'loss_weight': 1}
+                                'loss_weight': 0}
                             }
 
         # Provide path to directory containing data files if loading locally
@@ -211,11 +212,13 @@ class TransactionSignatures(pl.LightningModule):
             else:
                 loss = self.cross_entropy_loss(logits, targets[feature])
             logs[key] = loss
-            loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
+            loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(loss)
             weighted_loss = loss * loss_weight
             if torch.isnan(weighted_loss).any():
+                print('\n\nLogits: {0}\n\n'.format(logits))
+                print('\n\nTartget: {0}\n\n'.format(targets[feature]))
                 print('{0} returned NaN loss'.format(feature))
-                weighted_loss.add(self.hparams.epsilon)
+                weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
             general_loss += weighted_loss
         logs['train_loss'] = general_loss
 
@@ -253,8 +256,10 @@ class TransactionSignatures(pl.LightningModule):
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
             if torch.isnan(weighted_loss).any():
+                print('\n\nLogits: {0}\n\n'.format(logits))
+                print('\n\nTartget: {0}\n\n'.format(targets[feature]))
                 print('{0} returned NaN loss'.format(feature))
-                weighted_loss.add(self.hparams.epsilon)
+                weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
             general_loss += weighted_loss
         logs['val_loss'] = general_loss
 
@@ -292,8 +297,10 @@ class TransactionSignatures(pl.LightningModule):
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
             if torch.isnan(weighted_loss).any():
+                print('\n\nLogits: {0}\n\n'.format(logits))
+                print('\n\nTartget: {0}\n\n'.format(targets[feature]))
                 print('{0} returned NaN loss'.format(feature))
-                weighted_loss.add(self.hparams.epsilon)
+                weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
             general_loss += weighted_loss
         logs['test_loss'] = general_loss
 
@@ -348,5 +355,7 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.hparams.lr,
+                                      eps=self.hparams.epsilon)
         return optimizer
