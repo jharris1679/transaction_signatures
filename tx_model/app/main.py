@@ -74,26 +74,10 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_sys_category', action='store_true',
                         help='Turn on feature')
-    parser.add_argument('--nhid', type=int, default=300,
-                        help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=4,
-                        help='number of transformer layers')
-    parser.add_argument('--ndecoder_layers', type=int, default=1,
-                        help='number decoder of layers')
-    parser.add_argument('--lr', type=float, default=0.0001,
-                        help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
                         help='upper epoch limit')
-    parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
-                        help='batch size')
-    parser.add_argument('--seq_len', type=int, default=32,
-                        help='sequence length')
-    parser.add_argument('--input_dropout', type=float, default=0,
-                        help='dropout applied to input sequences (0 = no dropout)')
-    parser.add_argument('--layer_dropout', type=float, default=0.5,
-                        help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--tied', action='store_true',
                         help='tie the word embedding and softmax weights')
     parser.add_argument('--seed', type=int, default=1111,
@@ -110,13 +94,39 @@ if __name__ == '__main__':
                         help='Values of k for calculating recall at k')
     parser.add_argument('--isLocal', action='store_true',
                         help='No calls to GCP')
+
+    # --------- These are tracked in the experiment log ----------- #
+    # ------------------------------------------------------------- #
+    parser.add_argument('--input_dropout', type=float, default=0,
+                        help='dropout applied to input sequences (0 = no dropout)')
+    parser.add_argument('--layer_dropout', type=float, default=0.2,
+                        help='dropout applied to layers (0 = no dropout)')
+    parser.add_argument('--batch_size', type=int, default=1024, metavar='N',
+                        help='batch size')
+    parser.add_argument('--seq_len', type=int, default=32,
+                        help='sequence length')
+    parser.add_argument('--merchant_name_loss_weight', type=int, default=1,
+                        help='Turn on feature')
+    parser.add_argument('--tod_loss_weight', type=int, default=0.1,
+                        help='Turn on feature')
+    parser.add_argument('--dow_loss_weight', type=int, default=0.1,
+                        help='Turn on feature')
+    parser.add_argument('--amount_loss_weight', type=int, default=0.01,
+                        help='Turn on feature')
+    parser.add_argument('--nhid', type=int, default=300,
+                        help='number of hidden units per layer')
+    parser.add_argument('--nlayers', type=int, default=1,
+                        help='number of transformer layers')
+    parser.add_argument('--ndecoder_layers', type=int, default=1,
+                        help='number decoder of layers')
+    parser.add_argument('--lr', type=float, default=0.0005,
+                        help='initial learning rate')
     parser.add_argument('--num_gpus', type=int, default=2,
                         help='Number of GPUs to use')
     parser.add_argument('--epsilon', type=int, default=1e-6,
                         help='For numerical stability')
     parser.add_argument('--sample_size', type=int, default=1000000,
                         help='How much of the data to download. Files must already exist in this amount')
-
 
     args = parser.parse_args()
 
