@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 class TransactionSignatures(pl.LightningModule):
@@ -178,13 +179,11 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def cross_entropy_loss(self, output, targets):
-        criterion = nn.CrossEntropyLoss()
-        return criterion(output, targets)
+        return F.cross_entropy(output, targets)
 
 
     def mse_loss(self, output, targets):
-        criterion = nn.MSELoss()
-        return criterion(output, targets)
+        return F.mse_loss(output, targets)
 
 
     def recall_at_k(self, outputs, k, targets):
