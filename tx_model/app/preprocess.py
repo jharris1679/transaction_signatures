@@ -378,7 +378,7 @@ class Row(object):
 
 
     def prepare_token_sequence(self, seq):
-        sequence = np.append('<cls>', np.array(seq))
+        sequence = np.append('<cls>', np.array(seq)[::-1])
         target = sequence[-1]
         input = sequence[:-1]
 
@@ -390,7 +390,7 @@ class Row(object):
 
 
     def prepare_numeric_sequence(self, seq):
-        sequence = np.append(0, np.array(seq))
+        sequence = np.append(0, np.array(seq)[::-1])
         target = sequence[-1]
         input = sequence[:-1]
 
