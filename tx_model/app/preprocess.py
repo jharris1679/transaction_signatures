@@ -206,7 +206,7 @@ class Features(object):
 
         # Load pretrained embeddings
         # First two colums are index and merchant_name
-        if args.dataset_name=='[remove_this]merchant_seqs_by_tx':
+        if args.dataset_name=='merchant_seqs_by_tx':
             emb_data = bq.load_embeddings()
 
             # Add words to the dictionary
