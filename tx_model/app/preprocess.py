@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import countDistinct
 from google.cloud import bigquery
 import subprocess
 import pickle
@@ -93,6 +94,13 @@ class BigQuery(object):
                 .load()
         else:
             print(job_exception)
+
+        # Test that users do not have repeated examples
+        test_samples = spark_df.limit(1000).select('user_reference', 'merchant_name')
+        distinct_inputs = test_samples.groupBy('user_reference').agg(countDistinct('merchant_name'))
+        max_distinct_inputs = distinct_inputs.agg({"count(DISTINCT merchant_name)": "max"}).first()
+        print(max_distinct_inputs['max(count(DISTINCT merchant_name))'])
+        assert max_distinct_inputs['max(count(DISTINCT merchant_name))'] > 1
 
         print('Number of sequences: {0}'.format(spark_df.count()))
 
@@ -488,6 +496,13 @@ class Row(object):
                 avg_duration = round(stop_time - start_time, 1) / log_interval
                 print('{0} rows complete\n{1}s/row'.format(index, avg_duration))
                 start_time = time.time()
+
+        # test to ensure chunk isn't homogeneous
+        if idx==0:
+            distinct_targets = set()
+            for row in samples:
+                distinct_targets.add(row[1]['merchant_name'])
+            assert len(distinct_targets) > 1
 
         pickle.dump(samples, fh)
         fh.close()
