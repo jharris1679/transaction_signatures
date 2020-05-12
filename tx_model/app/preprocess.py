@@ -99,10 +99,10 @@ class BigQuery(object):
         test_samples = spark_df.limit(1000).select('user_reference', 'merchant_name', 'auth_ts')
         distinct_targets = test_samples.groupBy('user_reference').agg(countDistinct('auth_ts'))
         distinct_inputs = test_samples.groupBy('user_reference').agg(countDistinct('merchant_name'))
-        max_distinct_targets = distinct_targets.agg({"count(DISTINCT merchant_name)": "max"}).first()
-        max_distinct_inputs = distinct_inputs.agg({"count(DISTINCT auth_ts)": "max"}).first()
+        max_distinct_targets = distinct_targets.agg({"count(DISTINCT auth_ts)": "max"}).first()
+        max_distinct_inputs = distinct_inputs.agg({"count(DISTINCT merchant_name)": "max"}).first()
         print(max_distinct_inputs['max(count(DISTINCT merchant_name))'])
-        if max_distinct_targets > 1:
+        if max_distinct_targets['max(count(DISTINCT auth_ts))'] > 1:
             assert max_distinct_inputs['max(count(DISTINCT merchant_name))'] > 1
 
         print('Number of sequences: {0}'.format(spark_df.count()))
