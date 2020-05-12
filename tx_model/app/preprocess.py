@@ -209,7 +209,7 @@ class Features(object):
 
         # Load pretrained embeddings
         # First two colums are index and merchant_name
-        if args.dataset_name=='merchant_seqs_by_tx':
+        if args.use_pretrained_embeddings:
             emb_data = bq.load_embeddings()
 
             # Add words to the dictionary
@@ -518,12 +518,14 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
 
-    parser.add_argument('--dataset_name', type=str, default='merchant_seqs_by_tx',
+    parser.add_argument('--dataset_name', type=str, default='merchant_seqs_by_tx_power',
                         help='Name of input data')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
     parser.add_argument('--sample_size', type=int, default=-1,
                         help='sequence length')
+    parser.add_argument('--use_pretrained_embeddings', action='store_true',
+                        help='Use pretrained embeddings or not')
     parser.add_argument('--include_user_context', action='store_true',
                         help='Turn on feature')
     parser.add_argument('--include_eighth_of_day', action='store_true',
