@@ -518,7 +518,7 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
 
-    parser.add_argument('--dataset_name', type=str, default='merchant_seqs_by_tx_power',
+    parser.add_argument('--dataset_name', type=str, default='tx_power_allmerch',
                         help='Name of input data')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
