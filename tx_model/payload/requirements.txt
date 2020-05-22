@@ -2,7 +2,7 @@ numpy
 google-cloud-bigquery==1.11.3
 google-cloud-storage
 pyspark
-torch
+#torch
 mlflow
 tensorboardX
 pytorch-lightning==0.7.3

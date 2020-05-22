@@ -23,8 +23,14 @@ RUN  export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
 
 ENV LC_CTYPE=C.UTF-8
 
+RUN pip3 install numpy ninja pyyaml mkl mkl-include setuptools cmake cffi && \
+    export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+
+
 COPY payload/requirements.txt /srv/payload/
+RUN pip3 install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
 RUN pip3 install --requirement /srv/payload/requirements.txt
+#RUN pip3 install git+git://github.com/pytorch/pytorch.git@bd220b336b74337935a74f35dc74db7713a267b0
 
 # Empty checkpoints and logs before copying
 RUN rm -f checkpoints/* && \
