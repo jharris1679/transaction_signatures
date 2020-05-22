@@ -23,11 +23,13 @@ RUN  export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)" && \
 
 ENV LC_CTYPE=C.UTF-8
 
+RUN pip install torch==1.5.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 COPY payload/requirements.txt /srv/payload/
 RUN pip3 install --requirement /srv/payload/requirements.txt
 
 # Install Apex for 16-bit precision
 RUN git clone https://github.com/NVIDIA/apex && \
+    #sed -i '106s/^/#/' /home/apex/setup.py && \
     cd apex && \
     pip3 install -v --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 
@@ -51,13 +53,15 @@ ENV LD_LIBRARY_PATH='/usr/local/nvidia/lib64:/usr/local/nvidia/bin'
 ARG EXP_ID
 ENV EXP_ID=$EXP_ID
 
+
+#CMD ["bash"]
+
 ENTRYPOINT ["python3", \
             "main.py", \
-            "--epochs", "30", \
-            "--use_pretrained_embeddings", \
-            #"--include_eighth_of_day", \
-            #"--include_day_of_week" \
+            "--epochs", "5", \
+            "--include_eighth_of_day", \
+            "--include_day_of_week" \
             #"--include_user_context" \
+            #"--use_pretrained_embeddings", \
             #"--include_amount", \
-            #"--include_sys_category", \
             ]
