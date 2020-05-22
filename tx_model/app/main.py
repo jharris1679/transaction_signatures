@@ -29,6 +29,8 @@ def main(args):
         precision = 16
 
     initialized_model = model.TransactionSignatures(hparams=args)
+    #initialized_model.prepare_data()
+    #logger.experiment.add_graph(initialized_model, next(iter(initialized_model.val_dataloader())))
     trainer = pl.Trainer(logger=logger,
                         checkpoint_callback=ckpt_callback,
                         callbacks=[gcs_callback],
@@ -50,8 +52,6 @@ if __name__ == '__main__':
     # parametrize the network
     parser.add_argument('--experiment_id', type=str, default=experiment_id,
                         help='Name of current run')
-    parser.add_argument('--data', type=str, default='merchant_seqs_by_tx',
-                        help='Name of input data')
     parser.add_argument('--model_name', type=str, default='tx_model',
                         help='Name of model')
     parser.add_argument('--data_cache', action='store_true',
@@ -97,11 +97,13 @@ if __name__ == '__main__':
 
     # --------- These are tracked in the experiment log ----------- #
     # ------------------------------------------------------------- #
+    parser.add_argument('--data', type=str, default='merchant_seqs_by_tx_power',
+                        help='Name of input data')
     parser.add_argument('--input_dropout', type=float, default=0,
                         help='dropout applied to input sequences (0 = no dropout)')
-    parser.add_argument('--layer_dropout', type=float, default=0.2,
+    parser.add_argument('--layer_dropout', type=float, default=0.02,
                         help='dropout applied to layers (0 = no dropout)')
-    parser.add_argument('--batch_size', type=int, default=1024, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='batch size')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
@@ -115,17 +117,17 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=1,
+    parser.add_argument('--nlayers', type=int, default=4,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
-    parser.add_argument('--lr', type=float, default=0.0005,
+    parser.add_argument('--lr', type=float, default=0.0001,
                         help='initial learning rate')
     parser.add_argument('--num_gpus', type=int, default=2,
                         help='Number of GPUs to use')
     parser.add_argument('--epsilon', type=int, default=1e-6,
                         help='For numerical stability')
-    parser.add_argument('--sample_size', type=int, default=1000000,
+    parser.add_argument('--sample_size', type=int, default=-1,
                         help='How much of the data to download. Files must already exist in this amount')
 
     args = parser.parse_args()

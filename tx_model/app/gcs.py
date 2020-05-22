@@ -52,11 +52,10 @@ class LogSyncCallback(pl.Callback):
             loss = int(re.search(r'(?<=val_loss=)\d', filename).group(0))
 
             if loss < self.min_ckpt_loss:
+                self.min_ckpt_loss = loss
                 ckpt_file = os.path.join(ckpt_path, filename)
                 print('\nSyncing {} to GCS'.format(ckpt_file))
                 copy_string = 'gsutil -m cp -r {0} gs://tx_sig_checkpoints/{1}/'
                 copy_command = copy_string.format(ckpt_file, self.model_name)
                 subprocess.run(copy_command.split())
-
-                self.min_ckpt_loss = loss
         pass
