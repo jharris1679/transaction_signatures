@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
+
 class TransactionSignatures(pl.LightningModule):
 
     def __init__(self, hparams):
@@ -49,16 +50,17 @@ class TransactionSignatures(pl.LightningModule):
 
         # Provide path to directory containing data files if loading locally
         # See data.py for more detail
-        self.features = data.LoadDataset(self.hparams.sample_size, local_source=None)
+        self.dataset = data.LoadDataset(self.hparams.sample_size, local_source=None)
+        self.dataset.download_dict()
 
-        self.feature_set['merchant_name']['output_size'] = self.features.nmerchant
-        self.feature_set['user_reference']['output_size'] = self.features.nusers
-        self.feature_set['sys_category']['output_size'] = self.features.ncat
+        self.feature_set['merchant_name']['output_size'] = self.dataset.nmerchant
+        self.feature_set['user_reference']['output_size'] = self.dataset.nusers
+        self.feature_set['sys_category']['output_size'] = self.dataset.ncat
 
         if hparams.use_pretrained_embeddings is False:
-            self.merchant_embedding = nn.Embedding(self.features.nmerchant, hparams.embedding_size)
+            self.merchant_embedding = nn.Embedding(self.dataset.nmerchant, hparams.embedding_size)
         else:
-            embeddings = torch.tensor(self.features.dictionary['merchant_embeddings']).float()
+            embeddings = torch.tensor(self.dataset.dictionary['merchant_embeddings']).float()
             self.merchant_embedding = nn.Embedding.from_pretrained(embeddings, freeze=False)
 
         self.aux_feat_size = 0
@@ -73,10 +75,10 @@ class TransactionSignatures(pl.LightningModule):
             self.aux_embedding = nn.Linear(self.aux_feat_size, self.hparams.embedding_size)
 
         if self.feature_set['user_reference']:
-            self.user_embedding = nn.Embedding(self.features.nusers, self.hparams.embedding_size)
+            self.user_embedding = nn.Embedding(self.dataset.nusers, self.hparams.embedding_size)
 
         if self.feature_set['sys_category']:
-            self.cat_embedding = nn.Embedding(self.features.ncat, self.hparams.embedding_size)
+            self.cat_embedding = nn.Embedding(self.dataset.ncat, self.hparams.embedding_size)
 
         self.src_mask = None
         self.input_dropout = nn.Dropout(hparams.input_dropout)
@@ -103,7 +105,7 @@ class TransactionSignatures(pl.LightningModule):
         self.decoders = nn.ModuleDict({})
         for feature, config in self.feature_set.items():
             # excluding user_reference because input and target are the same
-            if config['enabled'] and feature != 'user_reference':
+            if config['enabled'] and feature == 'merchant_name':
                 decoder_layers = []
                 decoder_name = feature + '_decoder'
                 for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
@@ -129,9 +131,9 @@ class TransactionSignatures(pl.LightningModule):
 
     def forward(self, inputs, has_mask=False):
         if has_mask:
-            device = src.device
-            if self.src_mask is None or self.src_mask.size(0) != len(src):
-                mask = self._generate_square_subsequent_mask(len(src)).to(device)
+            device = inputs['merchant_name'].device
+            if self.src_mask is None or self.src_mask.size(0) != len(inputs['merchant_name']):
+                mask = self._generate_square_subsequent_mask(len(inputs['merchant_name'])).to(device)
                 self.src_mask = mask
         else:
             self.src_mask = None
@@ -140,7 +142,7 @@ class TransactionSignatures(pl.LightningModule):
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)
-            # swap batch and elem dims (0, 1) to be expandable elementwise
+            # swap batch and elem dims (0, 1) to be expandable elementwise)
             src = src.permute(1,0,2)
             src = src + user_src.expand_as(src)
             # swap back
@@ -164,16 +166,19 @@ class TransactionSignatures(pl.LightningModule):
             aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
-        src = self.positional_encoder(src)
+        #src = self.positional_encoder(src)
         transformer_output = self.transformer_encoder(src, self.src_mask)
 
         outputs = {}
+        trace_output = tuple()
         for feature, decoder in self.decoders.items():
             key_name = feature + '_output'
-            decoder_output = decoder(transformer_output[:,0])
+            decoder_input = torch.mean(transformer_output, dim=1)
+            decoder_output = decoder(decoder_input)
             softmax = F.log_softmax(decoder_output, dim=-1)
             output = softmax.add(self.hparams.epsilon).type_as(decoder_output)
             outputs[feature] = output
+            trace_output += (output,)
 
         return outputs
 
@@ -322,6 +327,7 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def prepare_data(self):
+        self.dataset.download_data()
         self.train_data = self.features.train
         self.val_data = self.features.val
         print(self.val_data[0])
