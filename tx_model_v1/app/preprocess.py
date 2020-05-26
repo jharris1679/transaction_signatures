@@ -486,14 +486,15 @@ class Row(object):
                     if feature == 'merchant_name':
                         feat2idx = self.dictionary['merchant2idx']
                         input_ids, target_ids = self.prepare_token_subseq(feat_seq, feat2idx)
-                        masks = []
+                        padding_mask = []
                         for merchant in enumerate(input_ids):
-                            if merchant != '<pad>':
-                                masks.append(1)
+                            if merchant == '<pad>':
+                                padding_mask.append(1)
                             else:
-                                masks.append(0)
+                                padding_mask.append(0)
                         input_dict[feature] = self.tensor(np.array(input_ids))
                         target_dict[feature] = self.tensor(np.array(target_ids))
+                        padding_mask = torch.tensor(padding_mask).bool()
 
                     if feature == 'mcc':
                         feat2idx = self.dictionary['mcc2idx']
@@ -511,10 +512,10 @@ class Row(object):
                         input_dict[feature] = torch.unsqueeze(self.tensor(inputs), dim=-1)
                         target_dict[feature] = torch.unsqueeze(self.tensor(targets), dim=-1)
 
-                sample = input_dict, target_dict
+                sample = input_dict, target_dict, padding_mask
                 samples.append(sample)
 
-            if index%log_interval==0:
+            if index%log_interval==0 and index!=0:
                 stop_time = time.time()
                 avg_duration = round(stop_time - start_time, 1) / log_interval
                 print('{0} rows complete\n{1}s/row'.format(index, avg_duration))

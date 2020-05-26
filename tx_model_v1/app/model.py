@@ -42,9 +42,9 @@ class TransactionSignatures(pl.LightningModule):
                                 'output_size': 1,
                                 'loss_weight': hparams.amount_loss_weight},
                             'mcc':
-                                {'enabled':False,
+                                {'enabled':hparams.include_mcc,
                                 'output_size': None,
-                                'loss_weight': 0}
+                                'loss_weight': hparams.mcc_loss_weight}
                             }
 
         # Provide path to directory containing data files if loading locally
@@ -104,7 +104,7 @@ class TransactionSignatures(pl.LightningModule):
         self.decoders = nn.ModuleDict({})
         for feature, config in self.feature_set.items():
             # excluding user_reference because input and target are the same
-            if config['enabled'] and feature == 'merchant_name':
+            if config['enabled'] and feature != 'user_reference':
                 decoder_layers = []
                 decoder_name = feature + '_decoder'
                 for i, x in enumerate(range(self.hparams.ndecoder_layers-1)):
@@ -128,11 +128,21 @@ class TransactionSignatures(pl.LightningModule):
         return mask
 
 
-    def forward(self, inputs, has_mask=False):
-        if has_mask:
+    def forward(self,
+                inputs,
+                has_src_mask=True,
+                src_key_padding_mask=None):
+
+        mask_sum = src_key_padding_mask.sum(dim=1)
+        #print(mask_sum.max())
+        assert mask_sum.max() != self.hparams.seq_len
+        #print(mask_sum.min())
+        assert src_key_padding_mask.sum(dim=1).eq(self.hparams.seq_len).byte().any() == False
+
+        if has_src_mask:
             device = inputs['merchant_name'].device
-            if self.src_mask is None or self.src_mask.size(0) != len(inputs['merchant_name']):
-                mask = self._generate_square_subsequent_mask(len(inputs['merchant_name'])).to(device)
+            if self.src_mask is None or self.src_mask.size(0) != inputs['merchant_name'].size(1):
+                mask = self._generate_square_subsequent_mask(inputs['merchant_name'].size(1)).to(device)
                 self.src_mask = mask
         else:
             self.src_mask = None
@@ -165,18 +175,26 @@ class TransactionSignatures(pl.LightningModule):
             aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
+
+
         src = self.positional_encoder(src)
+        #print('scr: {}'.format(src.size()))
+        #print('key_padding: {}'.format(src_key_padding_mask.size()))
+        src = src.permute(1,0,2)
+        #print('attn_mask: {}'.format(self.src_mask.size()))
         transformer_output = self.transformer_encoder(src, self.src_mask)
+        transformer_output = transformer_output.permute(1,0,2)
+        #print('transformer_output: {}'.format(transformer_output.size()))
+        #print(transformer_output)
 
         outputs = {}
         trace_output = tuple()
         for feature, decoder in self.decoders.items():
             key_name = feature + '_output'
             decoder_output = decoder(transformer_output)
-            softmax = F.log_softmax(decoder_output, dim=-1)
-            output = softmax.add(self.hparams.epsilon).type_as(decoder_output)
-            outputs[feature] = output
-            trace_output += (output,)
+            #print('decoder_output {0}: {1}'.format(feature, decoder_output.size()))
+            outputs[feature] = decoder_output
+            trace_output += (decoder_output,)
 
         return outputs
 
@@ -190,20 +208,28 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def recall_at_k(self, outputs, k, targets):
-        correct_count = torch.tensor(0).type_as(outputs)
-        # loop over batches
-        for i, x in enumerate(targets):
-            values, indices = torch.topk(outputs[i][-1], k)
-            if x[-1] in indices:
-                correct_count += 1
-        recall_at_k = correct_count / len(targets)
-        return recall_at_k
+        batch_recall = torch.tensor(0).type_as(outputs)
+        # loop over sequnces in the batch and tokens in the sequence
+        for i, sequence in enumerate(targets):
+            output_seq = outputs[i]
+            correct_count = torch.tensor(0).type_as(outputs)
+            for j, token in enumerate(sequence):
+                values, indices = torch.topk(output_seq[j], k)
+                if token in indices:
+                    correct_count += 1
+            seq_recall = correct_count / len(sequence)
+            batch_recall += seq_recall
+
+        batch_recall = batch_recall / len(targets)
+        return batch_recall
 
 
     def training_step(self, train_batch, batch_idx):
 
-        inputs, targets = train_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = train_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=True)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
@@ -217,10 +243,10 @@ class TransactionSignatures(pl.LightningModule):
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(loss)
             weighted_loss = loss * loss_weight
             if torch.isnan(weighted_loss).any():
-                print('\n\nLogits: {0}\n\n'.format(logits))
-                print('\n\nTartget: {0}\n\n'.format(targets[feature]))
+                print('\n\nLogits: {0}\n\n'.format(logits.size()))
+                print('\n\nTartget: {0}\n\n'.format(targets[feature].size()))
                 print('{0} returned NaN loss'.format(feature))
-                weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
+                #weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
             general_loss += weighted_loss
         logs['train_loss'] = general_loss
 
@@ -243,8 +269,10 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def validation_step(self, val_batch, batch_idx):
-        inputs, targets = val_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = val_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=True)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
@@ -261,7 +289,7 @@ class TransactionSignatures(pl.LightningModule):
                 print('\n\nLogits: {0}\n\n'.format(logits))
                 print('\n\nTartget: {0}\n\n'.format(targets[feature]))
                 print('{0} returned NaN loss'.format(feature))
-                weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
+                #weighted_loss = torch.tensor(self.hparams.epsilon).type_as(loss)
             general_loss += weighted_loss
         logs['val_loss'] = general_loss
 
@@ -284,8 +312,10 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def test_step(self, test_batch, batch_idx):
-        inputs, targets = test_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = test_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=True)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
