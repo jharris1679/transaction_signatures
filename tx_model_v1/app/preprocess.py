@@ -197,6 +197,9 @@ class Features(object):
         self.data_dir = os.path.join(sample_dir, dataset_dir)
         try:
             os.mkdir(sample_dir)
+        except FileExistsError:
+            pass
+        try:
             os.mkdir(self.data_dir)
         except FileExistsError:
             pass
@@ -461,7 +464,7 @@ class Row(object):
 
         start_time = time.time()
 
-        log_interval = 10000
+        log_interval = 100
         samples = []
         enabled_features = {k:v for k,v in self.feature_config.items() if v['enabled']==True}
         for index, user_row in enumerate(chunk):
@@ -544,7 +547,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name', type=str, default='user_power',
                         help='Name of input data')
-    parser.add_argument('--seq_len', type=int, default=32,
+    parser.add_argument('--seq_len', type=int, default=256,
                         help='sequence length')
     parser.add_argument('--sample_size', type=int, default=-1,
                         help='sequence length')

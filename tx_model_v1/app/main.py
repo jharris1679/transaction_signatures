@@ -72,7 +72,7 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_amount', action='store_true',
                         help='Turn on feature')
-    parser.add_argument('--include_sys_category', action='store_true',
+    parser.add_argument('--include_mcc', action='store_true',
                         help='Turn on feature')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
@@ -97,15 +97,15 @@ if __name__ == '__main__':
 
     # --------- These are tracked in the experiment log ----------- #
     # ------------------------------------------------------------- #
-    parser.add_argument('--data', type=str, default='user_power',
+    parser.add_argument('--dataset_name', type=str, default='user_power',
                         help='Name of input data')
     parser.add_argument('--input_dropout', type=float, default=0,
                         help='dropout applied to input sequences (0 = no dropout)')
-    parser.add_argument('--layer_dropout', type=float, default=0.2,
+    parser.add_argument('--layer_dropout', type=float, default=0.02,
                         help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='batch size')
-    parser.add_argument('--seq_len', type=int, default=32,
+    parser.add_argument('--seq_len', type=int, default=256,
                         help='sequence length')
     parser.add_argument('--merchant_name_loss_weight', type=int, default=1,
                         help='Turn on feature')
@@ -115,9 +115,11 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--amount_loss_weight', type=int, default=0.01,
                         help='Turn on feature')
+    parser.add_argument('--mcc_loss_weight', type=int, default=0.5,
+                        help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=4,
+    parser.add_argument('--nlayers', type=int, default=12,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
