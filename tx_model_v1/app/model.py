@@ -2,6 +2,7 @@ import os
 import re
 import math
 import data
+import time
 import subprocess
 import torch
 import torch.nn as nn
@@ -49,7 +50,10 @@ class TransactionSignatures(pl.LightningModule):
 
         # Provide path to directory containing data files if loading locally
         # See data.py for more detail
-        self.dataset = data.LoadDataset(self.hparams.sample_size, local_source=None)
+        self.dataset = data.LoadDataset(self.hparams.sample_size,
+                                        self.hparams.dataset_name,
+                                        self.hparams.seq_len,
+                                        local_source=None)
         self.dataset.download_dict()
 
         self.feature_set['merchant_name']['output_size'] = self.dataset.nmerchant
@@ -182,7 +186,7 @@ class TransactionSignatures(pl.LightningModule):
         #print('key_padding: {}'.format(src_key_padding_mask.size()))
         src = src.permute(1,0,2)
         #print('attn_mask: {}'.format(self.src_mask.size()))
-        transformer_output = self.transformer_encoder(src, self.src_mask)
+        transformer_output = self.transformer_encoder(src, self.src_mask, src_key_padding_mask)
         transformer_output = transformer_output.permute(1,0,2)
         #print('transformer_output: {}'.format(transformer_output.size()))
         #print(transformer_output)
@@ -210,23 +214,22 @@ class TransactionSignatures(pl.LightningModule):
     def recall_at_k(self, outputs, k, targets):
         batch_recall = torch.tensor(0).type_as(outputs)
         # loop over sequnces in the batch and tokens in the sequence
-        for i, sequence in enumerate(targets):
+        for i, target_seq in enumerate(targets):
+            target_seq = target_seq.repeat(k,1)
             output_seq = outputs[i]
-            correct_count = torch.tensor(0).type_as(outputs)
-            for j, token in enumerate(sequence):
-                values, indices = torch.topk(output_seq[j], k)
-                if token in indices:
-                    correct_count += 1
-            seq_recall = correct_count / len(sequence)
+            values, indices = torch.topk(output_seq, k)
+            correct_count = torch.sum(target_seq.eq(indices.permute(1,0))).float()
+            seq_recall = torch.div(correct_count, target_seq.size(1))
             batch_recall += seq_recall
 
-        batch_recall = batch_recall / len(targets)
+        batch_recall = torch.div(batch_recall.float(), targets.size(0))
         return batch_recall
 
 
     def training_step(self, train_batch, batch_idx):
 
         inputs, targets, padding_masks = train_batch
+
         outputs = self.forward(inputs,
                                src_key_padding_mask=padding_masks,
                                has_src_mask=True)

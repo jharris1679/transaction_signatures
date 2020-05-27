@@ -1,8 +1,9 @@
 from torch.utils.data import Dataset
 import numpy as np
 import subprocess
-import gzip
+import unittest
 import pickle
+import gzip
 import time
 import os
 
@@ -19,7 +20,8 @@ class Dataset(Dataset):
 class LoadDataset(object):
     def __init__(self,
                  sample_size,
-                 gcs_source='gs://tx_sig_datasets/sample_{0}/user_power_32_data/',
+                 dataset_name,
+                 seq_len,
                  download_destination='gcs_data/',
                  local_source=None):
         """
@@ -39,14 +41,16 @@ class LoadDataset(object):
         self.download_destination = download_destination
 
         if sample_size < 0:
-            self.gcs_source = gcs_source.format('all')
+            sample_size_str = 'all'
         else:
-            self.gcs_source = gcs_source.format(sample_size)
+            sample_size_str = str(sample_size)
 
         if local_source is None:
             # Set local_source with dataset name
             self.dload_bool = True
-            self.local_source = self.download_destination + gcs_source.split('/')[4]
+            gcs_source_string = 'gs://tx_sig_datasets/sample_{0}/{1}_{2}_data/'
+            self.gcs_source = gcs_source_string.format(sample_size_str, dataset_name, str(seq_len))
+            self.local_source = self.download_destination + self.gcs_source.split('/')[4]
         else:
             self.dload_bool = False
             self.local_source = local_source
