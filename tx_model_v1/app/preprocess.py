@@ -490,8 +490,9 @@ class Row(object):
                         feat2idx = self.dictionary['merchant2idx']
                         input_ids, target_ids = self.prepare_token_subseq(feat_seq, feat2idx)
                         padding_mask = []
-                        for merchant in enumerate(input_ids):
-                            if merchant == '<pad>':
+                        for merchant_id in enumerate(input_ids):
+                            # 1 is the ID for the padding token
+                            if merchant_id == 1:
                                 padding_mask.append(1)
                             else:
                                 padding_mask.append(0)

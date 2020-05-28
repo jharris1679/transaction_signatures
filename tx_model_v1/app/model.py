@@ -204,7 +204,7 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def cross_entropy_loss(self, output, targets):
-        return F.cross_entropy(output.view(-1, self.dataset.nmerchant), targets)
+        return F.cross_entropy(output, targets)
 
 
     def mse_loss(self, output, targets):
@@ -241,7 +241,8 @@ class TransactionSignatures(pl.LightningModule):
             if feature=='amount':
                 loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
             else:
-                loss = self.cross_entropy_loss(logits, targets[feature].view(-1))
+                logits_view = logits.view(-1, self.dataset.nmerchant)
+                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(loss)
             weighted_loss = loss * loss_weight
@@ -284,7 +285,8 @@ class TransactionSignatures(pl.LightningModule):
             if feature=='amount':
                 loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
             else:
-                loss = self.cross_entropy_loss(logits, targets[feature].view(-1))
+                logits_view = logits.view(-1, self.dataset.nmerchant)
+                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
@@ -325,9 +327,10 @@ class TransactionSignatures(pl.LightningModule):
         for feature, logits in outputs.items():
             key = '{0}_test_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits), targets[feature])
+                loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
             else:
-                loss = self.cross_entropy_loss(logits, targets[feature])
+                logits_view = logits.view(-1, self.dataset.nmerchant)
+                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
