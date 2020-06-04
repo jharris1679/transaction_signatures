@@ -138,6 +138,7 @@ class TransactionSignatures(pl.LightningModule):
                 src_key_padding_mask=None):
 
         mask_sum = src_key_padding_mask.sum(dim=1)
+        #print('masked elems: {}'.format(mask_sum))
         #print(mask_sum.max())
         assert mask_sum.max() != self.hparams.seq_len
         #print(mask_sum.min())
@@ -186,10 +187,12 @@ class TransactionSignatures(pl.LightningModule):
         #print('key_padding: {}'.format(src_key_padding_mask.size()))
         src = src.permute(1,0,2)
         #print('attn_mask: {}'.format(self.src_mask.size()))
-        transformer_output = self.transformer_encoder(src, self.src_mask, src_key_padding_mask)
+        transformer_output = self.transformer_encoder(src,
+                                                      self.src_mask,
+                                                      src_key_padding_mask=src_key_padding_mask)
         transformer_output = transformer_output.permute(1,0,2)
         #print('transformer_output: {}'.format(transformer_output.size()))
-        #print(transformer_output)
+
 
         outputs = {}
         trace_output = tuple()
@@ -203,23 +206,39 @@ class TransactionSignatures(pl.LightningModule):
         return outputs
 
 
-    def cross_entropy_loss(self, output, targets):
-        return F.cross_entropy(output, targets)
+    def cross_entropy_loss(self, output, targets, masks):
+        masks = 1.0 - masks.float()
+        loss = F.cross_entropy(output, targets, reduce='none')
+        loss = loss * masks
+        masks_sum = masks.sum(dim=1)
+        loss = loss.sum(dim=1) / masks_sum
+        return loss.mean()
 
 
-    def mse_loss(self, output, targets):
-        return F.mse_loss(output, targets)
+    def mse_loss(self, output, targets, masks):
+        #print('mse output: {}'.format(output.size()))
+        #print('mse target: {}'.format(targets.size()))
+        #print('mse masks: {}'.format(masks.size()))
+        masks = 1.0 - masks.float()
+        loss = F.mse_loss(output, targets, reduce='none')
+        loss = loss * masks
+        masks_sum = masks.sum(dim=1)
+        loss = loss.sum(dim=1) / masks_sum
+        return loss.mean()
 
 
-    def recall_at_k(self, outputs, k, targets):
+    def recall_at_k(self, outputs, k, targets, masks):
         batch_recall = torch.tensor(0).type_as(outputs)
         # loop over sequnces in the batch and tokens in the sequence
-        for i, target_seq in enumerate(targets):
-            target_seq = target_seq.repeat(k,1)
-            output_seq = outputs[i]
-            values, indices = torch.topk(output_seq, k)
-            correct_count = torch.sum(target_seq.eq(indices.permute(1,0))).float()
-            seq_recall = torch.div(correct_count, target_seq.size(1))
+        for i, (target_seq, mask) in enumerate(zip(targets, masks)): # target_seq size: [S]
+            target_seq = target_seq.repeat(k,1) # target_seq size: [k,S]
+            output_seq = outputs[i] # output_seq size: [S,C]
+            _, indices = torch.topk(output_seq, k) # indices size: [S,k]
+            permute_indices = indices.permute(1,0) # size: [k,S]
+            eq_target_seq = target_seq.eq(permute_indices) # size: [k,S]
+            eq_target_seq = eq_target_seq * mask.view(1,-1) # size: [k,S]
+            correct_count = torch.sum(eq_target_seq, dim=0).float() # size: [S]
+            seq_recall = torch.div(correct_count.sum(), mask.sum()) # size: scalar
             batch_recall += seq_recall
 
         batch_recall = torch.div(batch_recall.float(), targets.size(0))
@@ -227,22 +246,22 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
-
         inputs, targets, padding_masks = train_batch
-
+        #print('padding_masks: {}'.format(padding_masks))
         outputs = self.forward(inputs,
                                src_key_padding_mask=padding_masks,
                                has_src_mask=True)
-
+        padding_masks = padding_masks#.view(-1)
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
-            key = feature + '_train_loss'
+            logits_view = logits.permute(0,2,1)
+            targets_view = targets[feature]#.view(-1)
+            key = '{0}_train_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
+                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
             else:
-                logits_view = logits.view(-1, self.dataset.nmerchant)
-                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
+                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(loss)
             weighted_loss = loss * loss_weight
@@ -254,8 +273,9 @@ class TransactionSignatures(pl.LightningModule):
             general_loss += weighted_loss
         logs['train_loss'] = general_loss
 
+        masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
-            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
+            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
             key = 'merchant_name_train_recall_at_{0}'.format(str(k.item()))
             logs[key] = recall
 
@@ -281,12 +301,13 @@ class TransactionSignatures(pl.LightningModule):
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
+            logits_view = logits.permute(0,2,1)
+            targets_view = targets[feature]#.view(-1)
             key = '{0}_val_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
+                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
             else:
-                logits_view = logits.view(-1, self.dataset.nmerchant)
-                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
+                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
@@ -298,10 +319,13 @@ class TransactionSignatures(pl.LightningModule):
             general_loss += weighted_loss
         logs['val_loss'] = general_loss
 
+        masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
-            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
+            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
             key = 'merchant_name_val_recall_at_{0}'.format(str(k.item()))
             logs[key] = recall
+
+        #self.predict(self.val_data)
 
         return {'val_loss': general_loss, 'log': logs}
 
@@ -325,12 +349,13 @@ class TransactionSignatures(pl.LightningModule):
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
-            key = '{0}_test_loss'.format(feature)
+            logits_view = logits.permute(0,2,1)
+            targets_view = targets[feature]#.view(-1)
+            key = '{0}_val_loss'.format(feature)
             if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits), targets[feature].view(-1))
+                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
             else:
-                logits_view = logits.view(-1, self.dataset.nmerchant)
-                loss = self.cross_entropy_loss(logits_view, targets[feature].view(-1))
+                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
@@ -342,8 +367,9 @@ class TransactionSignatures(pl.LightningModule):
             general_loss += weighted_loss
         logs['test_loss'] = general_loss
 
+        masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
-            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'])
+            recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
             key = 'merchant_name_test_recall_at_{0}'.format(str(k.item()))
             logs[key] = recall
 
@@ -360,11 +386,33 @@ class TransactionSignatures(pl.LightningModule):
         return {'log': logs}
 
 
+    def predict(self, predict_data):
+        prediction_inputs = DataLoader(predict_data,
+                          batch_size=1,
+                          num_workers=4)
+        prediction_outputs = []
+        for sample_idx, sample in enumerate(prediction_inputs):
+            input, target, padding_mask = sample
+            logits = self.forward(input,
+                                   src_key_padding_mask=padding_mask,
+                                   has_src_mask=True)
+
+            _, indices = torch.topk(logits['merchant_name'], 1)
+            merchant_names = []
+            for idx in indices.squeeze():
+                merchant_names.append(self.dataset.dictionary['idx2merchant'][idx.item()])
+            prediction_outputs.append(merchant_names)
+
+        print(prediction_outputs[0])
+
+        return prediction_outputs
+
+
     def prepare_data(self):
         self.dataset.download_data()
         self.train_data = self.dataset.train
         self.val_data = self.dataset.val
-        print(self.val_data[0])
+        #print(self.val_data[0])
         self.test_data = self.dataset.test
 
         print('Enabled features: {}'.format(self.feature_set))
