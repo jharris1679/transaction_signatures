@@ -47,4 +47,4 @@ join
   and amount*-1 < 3000
   and format_date('%Y-%m', date(auth_ts)) = '2020-04') b using(user_reference)
 group by a.user_reference
-having array_length(merchant_name) > 1
+having array_length(merchant_name) >= 10

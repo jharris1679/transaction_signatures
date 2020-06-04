@@ -3,11 +3,7 @@ with users as
   user_reference
 from `tensile-oarlock-191715.postgres_reporting.transactions` a
 join `tensile-oarlock-191715.user_personas.clustered_users` b on a.user_reference = b.index
-join `koho-staging.merchant_vectors.int_indexed_common_raw_merchants` c
-  on a.merchant_name = c.normalized_merchant_name
-  and a.mcc = c.mcc
 where description = 'Visa settle'
-and label in (1, 11)
 and merchant_name is not null
 and sys_category is not null
 and length(merchant_name) > 1
@@ -36,9 +32,6 @@ join
     sys_category,
     a.mcc
   from `tensile-oarlock-191715.postgres_reporting.transactions` a
-  join `koho-staging.merchant_vectors.int_indexed_common_raw_merchants` b
-    on a.merchant_name = b.normalized_merchant_name
-    and a.mcc = b.mcc
   where description = 'Visa settle'
   and merchant_name is not null
   and sys_category is not null
@@ -47,4 +40,4 @@ join
   and amount*-1 < 3000
   and format_date('%Y-%m', date(auth_ts)) < '2020-01') b using(user_reference)
 group by a.user_reference
-having array_length(merchant_name) >= 10
+having array_length(merchant_name) > 1

@@ -169,6 +169,8 @@ class Features(object):
         self.dictionary.add_merchant('<pad>')
         self.dictionary.add_mcc('<pad>')
 
+        print(self.dictionary.merchant2idx['<pad>'])
+
         # Initialize bigquery client with spark
         bq = BigQuery(args.sample_size, isCached, isLocal)
 
@@ -305,7 +307,10 @@ class Features(object):
         self.data_length = 0
         for row in data:
             self.dictionary.add_user(row[user_col])
-            self.data_length += math.ceil(len(row[merchant_col])/self.args.seq_len)
+            if len(row[merchant_col]) < self.args.seq_len:
+                self.data_length += 1
+            else:
+                self.data_length += math.floor(len(row[merchant_col])/self.args.seq_len)
             for merchant in row[merchant_col]:
                 self.dictionary.add_merchant(merchant)
             for mcc in row[mcc_col]:
@@ -391,14 +396,18 @@ class Row(object):
         #print('presplit: {}'.format(seqs.shape))
         subseqs = []
         for i in range(0, len(seqs), self.args.seq_len):
+            #print('i: {0}  i+seq_len: {1}'.format(i,i+self.args.seq_len))
             subseq = seqs[i:i+self.args.seq_len]
-            #print('subseq: {}'.format(len(subseq)))
-            subseqs.append(subseq)
+            #print('subseq length: {}'.format(len(subseq)))
+            assert len(subseq) > 0
+            # keep first subseq and complete subseqs afterward
+            if i==0 or len(subseq)==self.args.seq_len:
+                subseqs.append(subseq)
         return subseqs
 
 
     def prepare_token_subseq(self, subseq, feat2idx):
-        sequence = np.append('<cls>', np.array(subseq)[::-1])
+        sequence = np.array(subseq)[::-1]
         input = sequence[:-1]
         target = sequence[1:]
         assert len(target)==len(input)
@@ -420,7 +429,7 @@ class Row(object):
 
 
     def prepare_numeric_subseq(self, subseq):
-        sequence = np.append(0, np.array(subseq)[::-1]).astype(np.float64)
+        sequence = np.array(subseq)[::-1].astype(np.float64)
         input = sequence[:-1]
         target = sequence[1:]
         assert len(target)==len(input)
@@ -490,12 +499,13 @@ class Row(object):
                         feat2idx = self.dictionary['merchant2idx']
                         input_ids, target_ids = self.prepare_token_subseq(feat_seq, feat2idx)
                         padding_mask = []
-                        for merchant_id in enumerate(input_ids):
+                        for merchant_id in input_ids:
                             # 1 is the ID for the padding token
                             if merchant_id == 1:
                                 padding_mask.append(1)
                             else:
                                 padding_mask.append(0)
+                        assert sum(padding_mask) != self.args.seq_len
                         input_dict[feature] = self.tensor(np.array(input_ids))
                         target_dict[feature] = self.tensor(np.array(target_ids))
                         padding_mask = torch.tensor(padding_mask).bool()
@@ -508,6 +518,7 @@ class Row(object):
 
                     if feature in ['day_of_week', 'eighth_of_day']:
                         inputs, targets = self.prepare_numeric_subseq(feat_seq)
+                        targets = targets.astype(np.int64)
                         input_dict[feature] = self.encode_cyclical(self.tensor(inputs))
                         target_dict[feature] = self.tensor(targets)
 

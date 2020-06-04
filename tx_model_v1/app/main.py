@@ -101,7 +101,7 @@ if __name__ == '__main__':
                         help='Name of input data')
     parser.add_argument('--input_dropout', type=float, default=0,
                         help='dropout applied to input sequences (0 = no dropout)')
-    parser.add_argument('--layer_dropout', type=float, default=0.02,
+    parser.add_argument('--layer_dropout', type=float, default=0.2,
                         help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='batch size')
@@ -119,7 +119,7 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=12,
+    parser.add_argument('--nlayers', type=int, default=4,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
