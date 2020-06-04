@@ -7,13 +7,12 @@ join `koho-staging.merchant_vectors.int_indexed_common_raw_merchants` c
   on a.merchant_name = c.normalized_merchant_name
   and a.mcc = c.mcc
 where description = 'Visa settle'
-and label in (1, 11)
 and merchant_name is not null
 and sys_category is not null
 and length(merchant_name) > 1
 and amount*-1 > 0
 and amount*-1 < 3000
-and format_date('%Y-%m', date(auth_ts)) < '2020-01')
+and format_date('%Y-%m', date(auth_ts)) = '2020-04')
 
 
 select
@@ -45,6 +44,6 @@ join
   and length(merchant_name) > 1
   and amount*-1 > 0
   and amount*-1 < 3000
-  and format_date('%Y-%m', date(auth_ts)) < '2020-01') b using(user_reference)
+  and format_date('%Y-%m', date(auth_ts)) = '2020-04') b using(user_reference)
 group by a.user_reference
-having array_length(merchant_name) >= 10
+having array_length(merchant_name) > 1
