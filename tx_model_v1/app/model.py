@@ -244,6 +244,33 @@ class TransactionSignatures(pl.LightningModule):
         batch_recall = torch.div(batch_recall.float(), targets.size(0))
         return batch_recall
 
+    def fuzzy_recall(self, outputs, targets, masks):
+        batch_recall = torch.tensor(0).type_as(outputs)
+        # loop over sequnces in the batch and tokens in the sequence
+        for i, (target_seq, mask) in enumerate(zip(targets, masks)): # target_seq size: [S]
+            mask = mask.bool()
+            target_seq_clone = target_seq.clone() # breaks autograd if not cloned
+            target_masked = target_seq_clone.masked_fill_(~mask, -1) # replace pad with -1 so early pad guesses don't count
+            target_seq_square = target_masked.repeat(len(target_seq),1) #size: [S,S]
+            target_seq_triu = torch.triu(target_seq_square) #size [S,S], elements below diagonal are 0
+            output_seq = outputs[i] # output_seq size: [S,C]
+            _, indices = torch.topk(output_seq, 1) # indices size: [S,1]
+            indices = indices.squeeze() # size: [S]
+            indices_square = indices.repeat(len(indices), 1).permute(1,0) # size: [S,S], seq along dim 0
+            eq_target_seq = indices_square.eq(target_seq_triu).any(dim=1) # size: [S]
+            correct_count = torch.sum(eq_target_seq).float() # size: scalar
+            #print('mask: {}'.format(mask))
+            #print('target: {}'.format(target_seq))
+            #print('output: {}'.format(indices))
+            #print('eq_target_seq: {}'.format(eq_target_seq))
+            #print('correct_count: {}'.format(correct_count))
+            seq_recall = torch.div(correct_count, mask.sum())
+            #print('seq_recall: {}'.format(seq_recall))
+            batch_recall += seq_recall
+        batch_recall = torch.div(batch_recall.float(), targets.size(0))
+        #print('batch_recall: {}'.format(batch_recall))
+        return batch_recall
+
 
     def training_step(self, train_batch, batch_idx):
         inputs, targets, padding_masks = train_batch
@@ -276,8 +303,11 @@ class TransactionSignatures(pl.LightningModule):
         masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
-            key = 'merchant_name_train_recall_at_{0}'.format(str(k.item()))
-            logs[key] = recall
+            recall_key = 'merchant_name_train_recall_at_{0}'.format(str(k.item()))
+            logs[recall_key] = recall
+
+        fuzzy_recall = self.fuzzy_recall(outputs['merchant_name'], targets['merchant_name'], masked_targets)
+        logs['merchant_name_train_fuzzy_recall'] = fuzzy_recall
 
         return {'loss': general_loss, 'log': logs}
 
@@ -322,10 +352,11 @@ class TransactionSignatures(pl.LightningModule):
         masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
-            key = 'merchant_name_val_recall_at_{0}'.format(str(k.item()))
-            logs[key] = recall
+            recall_key = 'merchant_name_val_recall_at_{0}'.format(str(k.item()))
+            logs[recall_key] = recall
 
-        #self.predict(self.val_data)
+        fuzzy_recall = self.fuzzy_recall(outputs['merchant_name'], targets['merchant_name'], masked_targets)
+        logs['merchant_name_val_fuzzy_recall'] = fuzzy_recall
 
         return {'val_loss': general_loss, 'log': logs}
 
@@ -370,8 +401,11 @@ class TransactionSignatures(pl.LightningModule):
         masked_targets = (1-padding_masks.float())
         for k in self.hparams.kvalues:
             recall = self.recall_at_k(outputs['merchant_name'], k, targets['merchant_name'], masked_targets)
-            key = 'merchant_name_test_recall_at_{0}'.format(str(k.item()))
-            logs[key] = recall
+            recall_key = 'merchant_name_test_recall_at_{0}'.format(str(k.item()))
+            logs[recall_key] = recall
+
+        fuzzy_recall = self.fuzzy_recall(outputs['merchant_name'], targets['merchant_name'], masked_targets)
+        logs['merchant_name_test_fuzzy_recall'] = fuzzy_recall
 
         return {'test_loss': general_loss, 'log': logs}
 
