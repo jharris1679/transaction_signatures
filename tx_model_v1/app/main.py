@@ -117,6 +117,8 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--mcc_loss_weight', type=int, default=0.5,
                         help='Turn on feature')
+    parser.add_argument('--proj_2D_loss_weight', type=int, default=1,
+                        help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
     parser.add_argument('--nlayers', type=int, default=4,
