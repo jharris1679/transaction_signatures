@@ -74,6 +74,8 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_mcc', action='store_true',
                         help='Turn on feature')
+    parser.add_argument('--include_proj_2D', action='store_true',
+                        help='Turn on feature')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
@@ -116,6 +118,8 @@ if __name__ == '__main__':
     parser.add_argument('--amount_loss_weight', type=int, default=0.01,
                         help='Turn on feature')
     parser.add_argument('--mcc_loss_weight', type=int, default=0.5,
+                        help='Turn on feature')
+    parser.add_argument('--proj_2D_loss_weight', type=int, default=1,
                         help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')

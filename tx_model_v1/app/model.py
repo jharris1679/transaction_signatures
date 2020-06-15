@@ -45,7 +45,11 @@ class TransactionSignatures(pl.LightningModule):
                             'mcc':
                                 {'enabled':hparams.include_mcc,
                                 'output_size': None,
-                                'loss_weight': hparams.mcc_loss_weight}
+                                'loss_weight': hparams.mcc_loss_weight},
+                            'proj_2D':
+                                {'enabled':hparams.include_proj_2D,
+                                'output_size': 2,
+                                'loss_weight': hparams.proj_2D_loss_weight}
                             }
 
         # Provide path to directory containing data files if loading locally
@@ -120,6 +124,15 @@ class TransactionSignatures(pl.LightningModule):
                 setattr(self, decoder_name, nn.Sequential(*decoder_layers))
                 self.decoders[feature] = getattr(self, decoder_name)
 
+                if feature == 'proj_2D':
+                    projection_decoder = []
+                    projection_decoder.append(nn.Linear(self.hparams.embedding_size,
+                                                        int(self.hparams.embedding_size/2)))
+                    projection_decoder.append(nn.ReLU())
+                    projection_decoder.append(nn.Linear(int(self.hparams.embedding_size/2), 2))
+                    setattr(self, 'proj_2D_decoder', nn.Sequential(*projection_decoder))
+                    self.decoders[feature] = getattr(self, 'proj_2D_decoder')
+
 
     def positional_encoder(self, x):
         x = x + self.pe[:x.size(0), :]
@@ -153,6 +166,7 @@ class TransactionSignatures(pl.LightningModule):
             self.src_mask = None
 
         src = self.merchant_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
+        merchant_embedding = src.clone()
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)
@@ -180,8 +194,6 @@ class TransactionSignatures(pl.LightningModule):
             aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
-
-
         src = self.positional_encoder(src)
         #print('scr: {}'.format(src.size()))
         #print('key_padding: {}'.format(src_key_padding_mask.size()))
@@ -193,12 +205,14 @@ class TransactionSignatures(pl.LightningModule):
         transformer_output = transformer_output.permute(1,0,2)
         #print('transformer_output: {}'.format(transformer_output.size()))
 
-
         outputs = {}
         trace_output = tuple()
         for feature, decoder in self.decoders.items():
             key_name = feature + '_output'
-            decoder_output = decoder(transformer_output)
+            if feature == 'proj_2D':
+                decoder_output = decoder(merchant_embedding)
+            else:
+                decoder_output = decoder(transformer_output)
             #print('decoder_output {0}: {1}'.format(feature, decoder_output.size()))
             outputs[feature] = decoder_output
             trace_output += (decoder_output,)
@@ -206,25 +220,58 @@ class TransactionSignatures(pl.LightningModule):
         return outputs
 
 
-    def cross_entropy_loss(self, output, targets, masks):
+    def cross_entropy_loss(self, outputs, targets, masks):
         masks = 1.0 - masks.float()
-        loss = F.cross_entropy(output, targets, reduce='none')
+        loss = F.cross_entropy(outputs, targets, reduce='none')
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
+        #print('cross_ent loss: {}'.format(loss.mean()))
         return loss.mean()
 
 
-    def mse_loss(self, output, targets, masks):
+    def mse_loss(self, outputs, targets, masks):
         #print('mse output: {}'.format(output.size()))
         #print('mse target: {}'.format(targets.size()))
         #print('mse masks: {}'.format(masks.size()))
         masks = 1.0 - masks.float()
-        loss = F.mse_loss(output, targets, reduce='none')
+        loss = F.mse_loss(outputs, targets, reduce='none')
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
+        #print('mse loss: {}'.format(loss.mean()))
         return loss.mean()
+
+    def proj_loss(self, outputs, masks):
+        # minimize the distinace between points in the projected space
+
+        N = torch.tensor(outputs.size(0)).float() # batch size
+        d = outputs.size(1) # projection dim
+        S = outputs.size(2) # sequence length
+
+        intraseq_dists = []
+        for idx, seq in enumerate(outputs):
+            mask = ~masks[idx] # size
+            S_nonpad = mask.sum()
+            #print(S_nonpad)
+            if S_nonpad < 256:
+                seq = seq[:,:S_nonpad]
+            #print(seq)
+            x = seq.permute(1,0) #size: [S_nonpad,d]
+            #print(x.size())
+            x = x.unsqueeze(0).expand(S_nonpad,S_nonpad,d)
+            y = x.permute(1,0,2)
+            dist = torch.pow(x - y, 2).sum(2) # size: [S_nonpad, S_nonpad]
+            #print(dist)
+            #print(dist.sum())
+            avg_dist = dist.sum() / (S_nonpad**2 - (S_nonpad-1))
+            #print(avg_dist)
+            intraseq_dists.append(torch.sqrt(avg_dist))
+
+        intraseq_dists = torch.stack(intraseq_dists, dim=0).type_as(outputs)
+        #print(intraseq_dists)
+        #print(intraseq_dists.mean())
+        return intraseq_dists.mean()
 
 
     def recall_at_k(self, outputs, k, targets, masks):
@@ -283,13 +330,18 @@ class TransactionSignatures(pl.LightningModule):
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
-            logits_view = logits.permute(0,2,1)
-            targets_view = targets[feature]#.view(-1)
             key = '{0}_train_loss'.format(feature)
-            if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+            logits_view = logits.permute(0,2,1)
+
+            if feature=='proj_2D':
+                loss = self.proj_loss(logits_view, padding_masks)
             else:
-                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+                targets_view = targets[feature]#.view(-1)
+                if feature=='amount':
+                    loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+                else:
+                    loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(loss)
             weighted_loss = loss * loss_weight
@@ -334,13 +386,18 @@ class TransactionSignatures(pl.LightningModule):
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
-            logits_view = logits.permute(0,2,1)
-            targets_view = targets[feature]#.view(-1)
             key = '{0}_val_loss'.format(feature)
-            if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+            logits_view = logits.permute(0,2,1)
+
+            if feature=='proj_2D':
+                loss = self.proj_loss(logits_view, padding_masks)
             else:
-                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+                targets_view = targets[feature]#.view(-1)
+                if feature=='amount':
+                    loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+                else:
+                    loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
@@ -385,13 +442,18 @@ class TransactionSignatures(pl.LightningModule):
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
         for feature, logits in outputs.items():
+            key = '{0}_test_loss'.format(feature)
             logits_view = logits.permute(0,2,1)
-            targets_view = targets[feature]#.view(-1)
-            key = '{0}_val_loss'.format(feature)
-            if feature=='amount':
-                loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+
+            if feature=='proj_2D':
+                loss = self.proj_loss(logits_view, padding_masks)
             else:
-                loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+                targets_view = targets[feature]#.view(-1)
+                if feature=='amount':
+                    loss = self.mse_loss(torch.squeeze(logits_view), torch.squeeze(targets_view), padding_masks)
+                else:
+                    loss = self.cross_entropy_loss(logits_view, targets_view, padding_masks)
+
             logs[key] = loss
             loss_weight = torch.tensor(self.feature_set[feature]['loss_weight']).type_as(logits)
             weighted_loss = loss * loss_weight
