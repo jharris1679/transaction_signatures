@@ -47,7 +47,7 @@ class TransactionSignatures(pl.LightningModule):
                                 'output_size': None,
                                 'loss_weight': hparams.mcc_loss_weight},
                             'proj_2D':
-                                {'enabled':False,
+                                {'enabled':hparams.include_proj_2D,
                                 'output_size': 2,
                                 'loss_weight': hparams.proj_2D_loss_weight}
                             }
@@ -124,12 +124,14 @@ class TransactionSignatures(pl.LightningModule):
                 setattr(self, decoder_name, nn.Sequential(*decoder_layers))
                 self.decoders[feature] = getattr(self, decoder_name)
 
-        projection_decoder = []
-        projection_decoder.append(nn.Linear(self.hparams.embedding_size,
-                                            int(self.hparams.embedding_size/2)))
-        projection_decoder.append(nn.ReLU())
-        projection_decoder.append(nn.Linear(int(self.hparams.embedding_size/2), 2))
-        self.projection_decoder = nn.Sequential(*projection_decoder)
+                if feature == 'proj_2D':
+                    projection_decoder = []
+                    projection_decoder.append(nn.Linear(self.hparams.embedding_size,
+                                                        int(self.hparams.embedding_size/2)))
+                    projection_decoder.append(nn.ReLU())
+                    projection_decoder.append(nn.Linear(int(self.hparams.embedding_size/2), 2))
+                    setattr(self, 'proj_2D_decoder', nn.Sequential(*projection_decoder))
+                    self.decoders[feature] = getattr(self, 'proj_2D_decoder')
 
 
     def positional_encoder(self, x):
@@ -148,9 +150,6 @@ class TransactionSignatures(pl.LightningModule):
                 has_src_mask=True,
                 src_key_padding_mask=None):
 
-        outputs = {}
-        trace_output = tuple()
-
         mask_sum = src_key_padding_mask.sum(dim=1)
         #print('masked elems: {}'.format(mask_sum))
         #print(mask_sum.max())
@@ -167,10 +166,7 @@ class TransactionSignatures(pl.LightningModule):
             self.src_mask = None
 
         src = self.merchant_embedding(inputs['merchant_name']) * math.sqrt(self.hparams.embedding_size)
-
-        proj_2D = self.projection_decoder(src)
-        outputs['proj_2D'] = proj_2D
-        trace_output += (proj_2D,)
+        merchant_embedding = src.clone()
 
         if self.feature_set['user_reference']['enabled']:
             user_src = self.user_embedding(inputs['user_reference']) * math.sqrt(self.hparams.embedding_size)
@@ -209,9 +205,14 @@ class TransactionSignatures(pl.LightningModule):
         transformer_output = transformer_output.permute(1,0,2)
         #print('transformer_output: {}'.format(transformer_output.size()))
 
+        outputs = {}
+        trace_output = tuple()
         for feature, decoder in self.decoders.items():
             key_name = feature + '_output'
-            decoder_output = decoder(transformer_output)
+            if feature == 'proj_2D':
+                decoder_output = decoder(merchant_embedding)
+            else:
+                decoder_output = decoder(transformer_output)
             #print('decoder_output {0}: {1}'.format(feature, decoder_output.size()))
             outputs[feature] = decoder_output
             trace_output += (decoder_output,)
@@ -225,6 +226,7 @@ class TransactionSignatures(pl.LightningModule):
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
+        print('cross_ent loss: {}'.format(loss.mean()))
         return loss.mean()
 
 
@@ -237,6 +239,7 @@ class TransactionSignatures(pl.LightningModule):
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
+        print('mse loss: {}'.format(loss.mean()))
         return loss.mean()
 
     def proj_loss(self, outputs, masks):
@@ -250,24 +253,24 @@ class TransactionSignatures(pl.LightningModule):
         for idx, seq in enumerate(outputs):
             mask = ~masks[idx] # size
             S_nonpad = mask.sum()
-            print(S_nonpad)
+            #print(S_nonpad)
             if S_nonpad < 256:
                 seq = seq[:,:S_nonpad]
-            print(seq)
+            #print(seq)
             x = seq.permute(1,0) #size: [S_nonpad,d]
-            print(x.size())
+            #print(x.size())
             x = x.unsqueeze(0).expand(S_nonpad,S_nonpad,d)
             y = x.permute(1,0,2)
             dist = torch.pow(x - y, 2).sum(2) # size: [S_nonpad, S_nonpad]
-            print(dist)
-            print(dist.sum())
+            #print(dist)
+            #print(dist.sum())
             avg_dist = dist.sum() / (S_nonpad**2 - (S_nonpad-1))
-            print(avg_dist)
+            #print(avg_dist)
             intraseq_dists.append(torch.sqrt(avg_dist))
 
         intraseq_dists = torch.stack(intraseq_dists, dim=0).type_as(outputs)
-        print(intraseq_dists)
-        print(intraseq_dists.mean())
+        #print(intraseq_dists)
+        #print(intraseq_dists.mean())
         return intraseq_dists.mean()
 
 
