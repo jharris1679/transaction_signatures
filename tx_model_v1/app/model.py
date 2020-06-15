@@ -226,7 +226,7 @@ class TransactionSignatures(pl.LightningModule):
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
-        print('cross_ent loss: {}'.format(loss.mean()))
+        #print('cross_ent loss: {}'.format(loss.mean()))
         return loss.mean()
 
 
@@ -239,7 +239,7 @@ class TransactionSignatures(pl.LightningModule):
         loss = loss * masks
         masks_sum = masks.sum(dim=1)
         loss = loss.sum(dim=1) / masks_sum
-        print('mse loss: {}'.format(loss.mean()))
+        #print('mse loss: {}'.format(loss.mean()))
         return loss.mean()
 
     def proj_loss(self, outputs, masks):

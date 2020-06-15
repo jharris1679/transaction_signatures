@@ -50,8 +50,8 @@ class LogSyncCallback(pl.Callback):
 
         for filename in os.listdir(ckpt_path):
             print('checking {}'.format(filename))
-            loss = int(re.search(r'(?<=val_loss=)\d', filename).group(0))
-            print(loss, self.min_ckpt_loss)
+            loss = float(re.search(r'(?<=val_loss=)\d.\d+', filename).group(0))
+            #print(loss, self.min_ckpt_loss)
             self.min_ckpt_loss = loss
 
             ckpt_file = os.path.join(ckpt_path, filename)
