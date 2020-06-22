@@ -1,0 +1,24 @@
+\BOOKMARK [1][-]{section.1}{Introduction}{}% 1
+\BOOKMARK [2][-]{subsection.1.1}{Motivation}{section.1}% 2
+\BOOKMARK [1][-]{section.2}{Hypothesis}{}% 3
+\BOOKMARK [1][-]{section.3}{Applications}{}% 4
+\BOOKMARK [1][-]{section.4}{Baseline Representations}{}% 5
+\BOOKMARK [1][-]{section.5}{Model Architecture}{}% 6
+\BOOKMARK [1][-]{section.6}{Evaluation Metrics}{}% 7
+\BOOKMARK [2][-]{subsection.6.1}{Recall@K}{section.6}% 8
+\BOOKMARK [2][-]{subsection.6.2}{Transferability of Representations}{section.6}% 9
+\BOOKMARK [1][-]{section.7}{Relevant Literature}{}% 10
+\BOOKMARK [1][-]{section.8}{Experimental protocol}{}% 11
+\BOOKMARK [2][-]{subsection.8.1}{Dataset description}{section.8}% 12
+\BOOKMARK [2][-]{subsection.8.2}{Preprocessing}{section.8}% 13
+\BOOKMARK [2][-]{subsection.8.3}{Combination of Inputs}{section.8}% 14
+\BOOKMARK [2][-]{subsection.8.4}{Loss Functions}{section.8}% 15
+\BOOKMARK [2][-]{subsection.8.5}{Hyperparameters}{section.8}% 16
+\BOOKMARK [1][-]{section.9}{Empirical Results}{}% 17
+\BOOKMARK [2][-]{subsection.9.1}{Training results}{section.9}% 18
+\BOOKMARK [3][-]{subsubsection.9.1.1}{Best model}{subsection.9.1}% 19
+\BOOKMARK [3][-]{subsubsection.9.1.2}{Model Variations}{subsection.9.1}% 20
+\BOOKMARK [2][-]{subsection.9.2}{Re-using Representations}{section.9}% 21
+\BOOKMARK [2][-]{subsection.9.3}{Projections of Representation Spaces}{section.9}% 22
+\BOOKMARK [1][-]{section.10}{Conclusion and future work}{}% 23
+\BOOKMARK [1][-]{section.11}{Acknowledgement}{}% 24

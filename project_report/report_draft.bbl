@@ -1,0 +1,62 @@
+\begin{thebibliography}{10}
+
+\bibitem{Bengio:2012}
+Yoshua {Bengio}, Aaron {Courville}, and Pascal {Vincent}.
+\newblock {Representation Learning: A Review and New Perspectives}.
+\newblock {\em arXiv e-prints}, page arXiv:1206.5538, June 2012.
+
+\bibitem{Devlin:2018}
+Jacob {Devlin}, Ming-Wei {Chang}, Kenton {Lee}, and Kristina {Toutanova}.
+\newblock {BERT: Pre-training of Deep Bidirectional Transformers for Language
+  Understanding}.
+\newblock {\em arXiv e-prints}, page arXiv:1810.04805, October 2018.
+
+\bibitem{Fefferman:2013}
+Charles {Fefferman}, Sanjoy {Mitter}, and Hariharan {Narayanan}.
+\newblock {Testing the Manifold Hypothesis}.
+\newblock {\em arXiv e-prints}, page arXiv:1310.0425, October 2013.
+
+\bibitem{Gauvrit:2011}
+Nicolas {Gauvrit}, Hector {Zenil}, Jean-Paul {Delahaye}, and Fernando
+  {Soler-Toscano}.
+\newblock {Algorithmic Complexity for Short Binary Strings Applied to
+  Psychology: A Primer}.
+\newblock {\em arXiv e-prints}, page arXiv:1106.3059, June 2011.
+
+\bibitem{Liu2019LatentSC}
+Yang Liu, Eunice Jun, Qisheng Li, and Jeffrey Heer.
+\newblock {Latent Space Cartography: Visual Analysis of Vector Space
+  Embeddings}.
+\newblock {\em Comput. Graph. Forum}, 38:67--78, 2019.
+
+\bibitem{McInnes:2018}
+Leland {McInnes}, John {Healy}, and James {Melville}.
+\newblock {UMAP: Uniform Manifold Approximation and Projection for Dimension
+  Reduction}.
+\newblock {\em arXiv e-prints}, page arXiv:1802.03426, February 2018.
+
+\bibitem{Mikolov:2013}
+Tomas {Mikolov}, Kai {Chen}, Greg {Corrado}, and Jeffrey {Dean}.
+\newblock {Efficient Estimation of Word Representations in Vector Space}.
+\newblock {\em arXiv e-prints}, page arXiv:1301.3781, January 2013.
+
+\bibitem{Pennington:2014}
+Jeffrey Pennington, Richard Socher, and Christopher~D. Manning.
+\newblock Glove: Global vectors for word representation.
+\newblock In {\em Empirical Methods in Natural Language Processing (EMNLP)},
+  pages 1532--1543, 2014.
+
+\bibitem{Vaswani:2017}
+Ashish {Vaswani}, Noam {Shazeer}, Niki {Parmar}, Jakob {Uszkoreit}, Llion
+  {Jones}, Aidan~N. {Gomez}, Lukasz {Kaiser}, and Illia {Polosukhin}.
+\newblock {Attention Is All You Need}.
+\newblock {\em arXiv e-prints}, page arXiv:1706.03762, June 2017.
+
+\bibitem{Zenil:2012}
+Hector {Zenil}, Fernando {Soler-Toscano}, Jean-Paul {Delahaye}, and Nicolas
+  {Gauvrit}.
+\newblock {Two-Dimensional Kolmogorov Complexity and Validation of the Coding
+  Theorem Method by Compressibility}.
+\newblock {\em arXiv e-prints}, page arXiv:1212.6745, December 2012.
+
+\end{thebibliography}
