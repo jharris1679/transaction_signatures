@@ -129,11 +129,14 @@ class TransactionSignatures(pl.LightningModule):
         return mask
 
 
-    def forward(self, inputs, has_mask=False):
-        if has_mask:
+    def forward(self,
+                inputs,
+                has_src_mask=False,
+                src_key_padding_mask=None):
+        if has_src_mask:
             device = inputs['merchant_name'].device
-            if self.src_mask is None or self.src_mask.size(0) != len(inputs['merchant_name']):
-                mask = self._generate_square_subsequent_mask(len(inputs['merchant_name'])).to(device)
+            if self.src_mask is None or self.src_mask.size(0) != inputs['merchant_name'].size(1):
+                mask = self._generate_square_subsequent_mask(inputs['merchant_name'].size(1)).to(device)
                 self.src_mask = mask
         else:
             self.src_mask = None
@@ -166,19 +169,22 @@ class TransactionSignatures(pl.LightningModule):
             aux_src = self.aux_embedding(aux_inputs) * math.sqrt(self.hparams.embedding_size)
             src = src + aux_src
 
-        #src = self.positional_encoder(src)
-        transformer_output = self.transformer_encoder(src, self.src_mask)
+        src = self.positional_encoder(src)
+        print('scr: {}'.format(src.size()))
+        print('key_padding: {}'.format(src_key_padding_mask.size()))
+        src = src.permute(1,0,2)
+        print('attn_mask: {}'.format(self.src_mask.size()))
+        transformer_output = self.transformer_encoder(src, self.src_mask, src_key_padding_mask)
+        transformer_output = transformer_output.permute(1,0,2)
+        print('transformer_output: {}'.format(transformer_output.size()))
 
         outputs = {}
         trace_output = tuple()
         for feature, decoder in self.decoders.items():
             key_name = feature + '_output'
-            decoder_input = torch.mean(transformer_output, dim=1)
-            decoder_output = decoder(decoder_input)
-            softmax = F.log_softmax(decoder_output, dim=-1)
-            output = softmax.add(self.hparams.epsilon).type_as(decoder_output)
-            outputs[feature] = output
-            trace_output += (output,)
+            decoder_output = decoder(transformer_output[:,0])
+            outputs[feature] = decoder_output
+            trace_output += (decoder_output,)
 
         return outputs
 
@@ -204,8 +210,10 @@ class TransactionSignatures(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
 
-        inputs, targets = train_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = train_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=False)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
@@ -245,8 +253,10 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def validation_step(self, val_batch, batch_idx):
-        inputs, targets = val_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = val_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=False)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])
@@ -286,8 +296,10 @@ class TransactionSignatures(pl.LightningModule):
 
 
     def test_step(self, test_batch, batch_idx):
-        inputs, targets = test_batch
-        outputs = self.forward(inputs)
+        inputs, targets, padding_masks = test_batch
+        outputs = self.forward(inputs,
+                               src_key_padding_mask=padding_masks,
+                               has_src_mask=False)
 
         logs = {}
         general_loss = torch.tensor(0.).type_as(outputs['merchant_name'])

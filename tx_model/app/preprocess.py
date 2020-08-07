@@ -433,7 +433,7 @@ class Row(object):
         cos = torch.cos(X)
         return torch.squeeze(torch.stack((sin, cos),1))
 
-    # This fucntion executes once per process
+
     def transform(self, chunk):
         idx = chunk[0]
         chunk = chunk[1]
@@ -444,7 +444,7 @@ class Row(object):
 
         start_time = time.time()
 
-        log_interval = 10000
+        log_interval = 100
         samples = []
         enabled_features = {k:v for k,v in self.feature_config.items() if v['enabled']==True}
         for index, row in enumerate(chunk):
@@ -461,15 +461,16 @@ class Row(object):
                 if feature == 'merchant_name':
                     sequence, target = self.prepare_token_sequence(feat_seq)
                     merchant_ids = []
-                    masks = []
+                    padding_mask = []
                     for merchant in sequence:
                         merchant_ids.append(self.dictionary['merchant2idx'][merchant])
-                        if merchant != '<pad>':
-                            masks.append(1)
+                        if merchant == '<pad>':
+                            padding_mask.append(1)
                         else:
-                            masks.append(0)
+                            padding_mask.append(0)
                     input_dict[feature] = self.tensor(np.array(merchant_ids))
                     target_dict[feature] = self.tensor(self.dictionary['merchant2idx'][target])
+                    padding_mask = torch.tensor(padding_mask).bool()
 
                 if feature == 'sys_category':
                     sequence, target = self.prepare_token_sequence(feat_seq)
@@ -491,10 +492,10 @@ class Row(object):
                     input_dict[feature] = sequence
                     target_dict[feature] = self.tensor(target)
 
-            sample = input_dict, target_dict
+            sample = input_dict, target_dict, padding_mask
             samples.append(sample)
 
-            if index%log_interval==0:
+            if index%log_interval==0 and index!=0:
                 stop_time = time.time()
                 avg_duration = round(stop_time - start_time, 1) / log_interval
                 print('{0} rows complete\n{1}s/row'.format(index, avg_duration))

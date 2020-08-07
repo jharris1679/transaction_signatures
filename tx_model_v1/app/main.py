@@ -29,8 +29,9 @@ def main(args):
         precision = 16
 
     initialized_model = model.TransactionSignatures(hparams=args)
-    #initialized_model.prepare_data()
-    #logger.experiment.add_graph(initialized_model, next(iter(initialized_model.val_dataloader())))
+    initialized_model.prepare_data()
+    data_sample = next(iter(initialized_model.val_dataloader()))
+    logger.experiment.add_graph(initialized_model, data_sample)
     trainer = pl.Trainer(logger=logger,
                         checkpoint_callback=ckpt_callback,
                         callbacks=[gcs_callback],
@@ -74,8 +75,8 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--include_mcc', action='store_true',
                         help='Turn on feature')
-    parser.add_argument('--include_proj_2D', action='store_true',
-                        help='Turn on feature')
+    #parser.add_argument('--include_proj_2D', action='store_true',
+    #                    help='Turn on feature')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--epochs', type=int, default=20,
@@ -107,7 +108,7 @@ if __name__ == '__main__':
                         help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='batch size')
-    parser.add_argument('--seq_len', type=int, default=256,
+    parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
     parser.add_argument('--merchant_name_loss_weight', type=int, default=1,
                         help='Turn on feature')
@@ -119,11 +120,11 @@ if __name__ == '__main__':
                         help='Turn on feature')
     parser.add_argument('--mcc_loss_weight', type=int, default=0.5,
                         help='Turn on feature')
-    parser.add_argument('--proj_2D_loss_weight', type=int, default=1,
-                        help='Turn on feature')
+    #parser.add_argument('--proj_2D_loss_weight', type=int, default=1,
+    #                    help='Turn on feature')
     parser.add_argument('--nhid', type=int, default=300,
                         help='number of hidden units per layer')
-    parser.add_argument('--nlayers', type=int, default=4,
+    parser.add_argument('--nlayers', type=int, default=12,
                         help='number of transformer layers')
     parser.add_argument('--ndecoder_layers', type=int, default=1,
                         help='number decoder of layers')
