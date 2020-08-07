@@ -1,41 +1,27 @@
-"apiVersion": |-
-  argoproj.io/v1alpha1
-"kind": |-
-  Workflow
-"metadata":
-  "annotations":
-    "pipelines.kubeflow.org/pipeline_spec": |-
-      {"description": "Spending Signatures", "name": "User Embedding"}
-  "generateName": |-
-    user-embedding-
-"spec":
-  "arguments":
-    "parameters": []
-  "entrypoint": |-
-    user-embedding
-  "serviceAccountName": |-
-    pipeline-runner
-  "templates":
-  - "container":
-      "image": |-
-        gcr.io/tensile-oarlock-191715/user-embedding-img:quit_ls
-      "resources":
-        "limits":
-          "nvidia.com/gpu": !!int |-
-            2
-        "requests":
-          "memory": |-
-            90G
-    "name": |-
-      train-data
-    "nodeSelector":
-      "cloud.google.com/gke-accelerator": |-
-        nvidia-tesla-v100
-  - "dag":
-      "tasks":
-      - "name": |-
-          train-data
-        "template": |-
-          train-data
-    "name": |-
-      user-embedding
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: user-embedding-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 0.5.1, pipelines.kubeflow.org/pipeline_compilation_time: '2020-06-18T01:40:14.773707',
+    pipelines.kubeflow.org/pipeline_spec: '{"description": "Spending Signatures",
+      "name": "User Embedding"}'}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 0.5.1}
+spec:
+  entrypoint: user-embedding
+  templates:
+  - name: train-data
+    container:
+      image: gcr.io/tensile-oarlock-191715/user-embedding-img:preferences_incidence
+      resources:
+        limits: {nvidia.com/gpu: 2}
+        requests: {memory: 50G}
+    nodeSelector: {cloud.google.com/gke-accelerator: nvidia-tesla-v100}
+    metadata:
+      labels: {pipelines.kubeflow.org/pipeline-sdk-type: kfp}
+  - name: user-embedding
+    dag:
+      tasks:
+      - {name: train-data, template: train-data}
+  arguments:
+    parameters: []
+  serviceAccountName: pipeline-runner

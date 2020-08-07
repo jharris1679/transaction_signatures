@@ -47,9 +47,9 @@ class TransactionSignatures(pl.LightningModule):
                                 'output_size': None,
                                 'loss_weight': hparams.mcc_loss_weight},
                             'proj_2D':
-                                {'enabled':hparams.include_proj_2D,
+                                {'enabled':False,
                                 'output_size': 2,
-                                'loss_weight': hparams.proj_2D_loss_weight}
+                                'loss_weight': 0}
                             }
 
         # Provide path to directory containing data files if loading locally
@@ -217,7 +217,7 @@ class TransactionSignatures(pl.LightningModule):
             outputs[feature] = decoder_output
             trace_output += (decoder_output,)
 
-        return outputs
+        return trace_output
 
 
     def cross_entropy_loss(self, outputs, targets, masks):

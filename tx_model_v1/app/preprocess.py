@@ -559,9 +559,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name', type=str, default='user_power',
                         help='Name of input data')
-    parser.add_argument('--seq_len', type=int, default=256,
+    parser.add_argument('--seq_len', type=int, default=32,
                         help='sequence length')
-    parser.add_argument('--sample_size', type=int, default=-1,
+    parser.add_argument('--sample_size', type=int, default=10,
                         help='sequence length')
     parser.add_argument('--use_pretrained_embeddings', action='store_true',
                         help='Use pretrained embeddings or not')
